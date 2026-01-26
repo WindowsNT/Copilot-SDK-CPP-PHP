@@ -306,7 +306,7 @@ public:
 		}
 	}
 
-
+	private:
 	void Interactive(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
 	{	
 		const char* py = R"(
@@ -316,6 +316,7 @@ import random
 import sys
 import os
 import time
+import ctypes
 from copilot import CopilotClient
 from copilot.tools import define_tool
 from copilot.generated.session_events import SessionEventType
