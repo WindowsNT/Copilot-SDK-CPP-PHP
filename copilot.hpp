@@ -71,6 +71,76 @@ class COPILOT
 	}
 
 
+	std::wstring ChangeSlash(const wchar_t* s)
+	{
+		std::wstring r = s;
+		for (size_t i = 0; i < r.size(); i++)
+		{
+			if (r[i] == L'\\')
+				r[i] = L'/';
+		}
+		return r;
+	}
+
+	std::wstring TempFile(const wchar_t* etx)
+	{
+		wchar_t path[1000] = {};
+		GetTempPathW(1000, path);
+		wchar_t fi[1000] = {};
+		GetTempFileNameW(path, etx ? etx : L"tmp", 0, fi);
+		DeleteFileW(fi);
+		std::wstring s = fi;
+		if (etx)
+		{
+			s += L".";
+			s += etx;
+		}
+		return s;
+	}
+
+	HANDLE Run(const wchar_t* y, bool W, DWORD flg)
+	{
+		PROCESS_INFORMATION pInfo = { 0 };
+		STARTUPINFO sInfo = { 0 };
+
+		sInfo.cb = sizeof(sInfo);
+		wchar_t yy[1000];
+		swprintf_s(yy, 1000, L"%s", y);
+		CreateProcess(0, yy, 0, 0, 0, flg, 0, 0, &sInfo, &pInfo);
+		SetPriorityClass(pInfo.hProcess, IDLE_PRIORITY_CLASS);
+		SetThreadPriority(pInfo.hThread, THREAD_PRIORITY_IDLE);
+		if (W)
+			WaitForSingleObject(pInfo.hProcess, INFINITE);
+		else
+		{
+			CloseHandle(pInfo.hThread);
+			return pInfo.hProcess;
+		}
+		DWORD ec = 0;
+		GetExitCodeProcess(pInfo.hProcess, &ec);
+		CloseHandle(pInfo.hProcess);
+		CloseHandle(pInfo.hThread);
+		return (HANDLE)(unsigned long long)ec;
+	}
+
+	std::shared_ptr<std::thread> interactiveThread;
+	std::recursive_mutex promptMutex;
+
+	std::queue<COPILOT_QUESTION> Prompts;
+	std::map<unsigned long long, std::shared_ptr<ANSWER>> Answers;
+
+
+	void ReleaseAnswer(unsigned long long key)
+	{
+		std::lock_guard<std::recursive_mutex> lock(promptMutex);
+		auto it = Answers.find(key);
+		if (it != Answers.end())
+		{
+			Answers.erase(it);
+		}
+	}
+
+
 public:
 
 #ifdef _DEBUG
@@ -151,64 +221,6 @@ public:
 	}
 
 
-	std::wstring ChangeSlash(const wchar_t* s)
-	{
-		std::wstring r = s;
-		for (size_t i = 0; i < r.size(); i++)
-		{
-			if (r[i] == L'\\')
-				r[i] = L'/';
-		}
-		return r;
-	}
-
-	std::wstring TempFile(const wchar_t* etx)
-	{
-		wchar_t path[1000] = {};
-		GetTempPathW(1000, path);
-		wchar_t fi[1000] = {};
-		GetTempFileNameW(path, etx ? etx : L"tmp", 0, fi);
-		DeleteFileW(fi);
-		std::wstring s = fi;
-		if (etx)
-		{
-			s += L".";
-			s += etx;
-		}
-		return s;
-	}
-
-	HANDLE Run(const wchar_t* y, bool W, DWORD flg)
-	{
-		PROCESS_INFORMATION pInfo = { 0 };
-		STARTUPINFO sInfo = { 0 };
-
-		sInfo.cb = sizeof(sInfo);
-		wchar_t yy[1000];
-		swprintf_s(yy, 1000, L"%s", y);
-		CreateProcess(0, yy, 0, 0, 0, flg, 0, 0, &sInfo, &pInfo);
-		SetPriorityClass(pInfo.hProcess, IDLE_PRIORITY_CLASS);
-		SetThreadPriority(pInfo.hThread, THREAD_PRIORITY_IDLE);
-		if (W)
-			WaitForSingleObject(pInfo.hProcess, INFINITE);
-		else
-		{
-			CloseHandle(pInfo.hThread);
-			return pInfo.hProcess;
-		}
-		DWORD ec = 0;
-		GetExitCodeProcess(pInfo.hProcess, &ec);
-		CloseHandle(pInfo.hProcess);
-		CloseHandle(pInfo.hThread);
-		return (HANDLE)(unsigned long long)ec;
-	}
-
-
-	std::shared_ptr<std::thread> interactiveThread;
-	std::recursive_mutex promptMutex;
-
-	std::queue<COPILOT_QUESTION> Prompts;
-	std::map<unsigned long long, std::shared_ptr<ANSWER>> Answers;
 
 
 	std::shared_ptr<ANSWER> PushPrompt(const std::wstring& prompt,bool W)
@@ -233,17 +245,6 @@ public:
 		}
 		return answer;
 	}
-
-	void ReleaseAnswer(unsigned long long key)
-	{
-		std::lock_guard<std::recursive_mutex> lock(promptMutex);
-		auto it = Answers.find(key);
-		if (it != Answers.end())
-		{
-			Answers.erase(it);
-		}
-	}
-
 	void BeginInteractive()
 	{
 		if (interactiveThread)

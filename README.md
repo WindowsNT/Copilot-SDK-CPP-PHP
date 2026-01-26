@@ -1,6 +1,6 @@
 # Copilot SDK for C++
 
-Github released the [Copilot SDK](https://github.com/github/copilot-sdk?tab=readme-ov-file) and here 's a C++ wrapper around it to be used in Windows.
+Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows.
 
 # Installation
 * Create a folder with python installed 
@@ -8,7 +8,6 @@ Github released the [Copilot SDK](https://github.com/github/copilot-sdk?tab=read
 * Put [copilot.exe](https://github.com/github/copilot-cli/releases/) in that folder
 
 # Usage
-Include the header file in your project and link against the `copilot.lib` library.
 ```cpp
 #include "copilot.h"
 #include <iostream>
