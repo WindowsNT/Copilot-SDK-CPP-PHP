@@ -356,7 +356,6 @@ public:
 		}
 	}
 
-	private:
 	void Interactive(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
 	{	
 		const char* py = R"(
