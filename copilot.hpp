@@ -1,0 +1,471 @@
+
+// Copilot Class
+
+#pragma once
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <ws2tcpip.h>
+#include <wincrypt.h>   
+#include <ShlObj.h>
+#include <string>
+#include <queue>
+#include <mutex>
+#include <functional>
+#include <vector>
+#include <map>
+
+class PushPopDirX
+{
+	std::vector<wchar_t> cd;
+public:
+
+	PushPopDirX(const wchar_t* f)
+	{
+		cd.resize(1000);
+		GetCurrentDirectory(1000, cd.data());
+		SetCurrentDirectory(f);
+	}
+	~PushPopDirX()
+	{
+		SetCurrentDirectory(cd.data());
+	}
+};
+
+
+struct COPILOT_QUESTION
+{
+	std::wstring prompt;
+	unsigned long long key = 0;
+};
+
+struct ANSWER
+{
+	std::vector<std::wstring> strings;
+	HANDLE hEvent = 0;
+	unsigned long long key = 0;
+	~ANSWER()
+	{
+		if (hEvent)
+			CloseHandle(hEvent);
+		hEvent = 0;
+	}
+};
+class COPILOT
+{
+	std::wstring folder;
+	std::string model = "gpt-4.1";
+	std::string if_server = "";
+
+	std::wstring tou(const char* s)
+	{
+		std::vector<wchar_t> buf(strlen(s) + 1);
+		MultiByteToWideChar(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size());
+		return std::wstring(buf.data());
+	}
+
+	std::string toc(const wchar_t* s)
+	{
+		std::vector<char> buf(wcslen(s) * 4 + 1);
+		WideCharToMultiByte(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size(), 0, 0);
+		return std::string(buf.data());
+	}
+
+
+public:
+
+#ifdef _DEBUG
+	DWORD flg = CREATE_NEW_CONSOLE;
+#else
+	DWORD flg = CREATE_NO_WINDOW;
+#endif
+	COPILOT(std::wstring folder, std::string model = "gpt-4.1",std::string if_server = "")
+	{
+		this->folder = folder;
+		this->model = model;
+		this->if_server = if_server;	
+	}
+	~COPILOT()
+	{
+		EndInteractive();
+	}
+
+	static std::vector<std::string> copilot_model_list() {
+		return {
+	"Claude Sonnet 4.5",
+	"Claude Haiku 4.5",
+	"Claude Opus 4.5",
+	"GPT-5.2-Codex",
+	"GPT-5.1-Codex-Max",
+	"GPT-5.1-Codex",
+	"GPT-5.2",
+	"GPT-5.1",
+	"GPT-5",
+	"GPT-5.1-Codex-Mini",
+	"GPT-5 mini",
+	"GPT-4.1",
+	"Gemini 3 Pro (Preview)",
+		};
+	};
+
+
+	static std::wstring GetDefaultCopilotfolder()
+	{
+		// Check registry for unchanged
+		HKEY k = 0;
+		std::wstring where;
+		RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{5B2C72B7-E396-41CE-801D-EDA93EB4BA77}", 0, KEY_READ | KEY_WOW64_64KEY, &k);
+		if (k)
+		{
+			wchar_t buf[MAX_PATH] = { 0 };
+			DWORD sz = sizeof(buf);
+			RegQueryValueExW(k, L"Where", 0, 0, (LPBYTE)buf, &sz);
+			where = buf;
+			RegCloseKey(k);
+			if (where.length() > 2)
+			{
+				where += L"\\Copilot";
+				return where;
+			}
+		}
+		// Else, in programdata
+		PWSTR p = 0;
+		SHGetKnownFolderPath(FOLDERID_ProgramData, 0, 0, &p);
+		std::wstring prjf;
+		if (p)
+		{
+			wchar_t m[MAX_PATH] = { 0 };
+			wcscpy_s(m, MAX_PATH, p);
+			CoTaskMemFree(p);
+			wcscat_s(m, MAX_PATH, L"\\{721FA716-F32C-4CBA-A9EC-0B43070FBE36}");
+			SHCreateDirectory(0, m);
+			prjf = m;
+		}
+		return prjf;
+	}
+
+	bool IsInstalled()
+	{
+		wchar_t path[1000] = {};
+		swprintf_s(path, 1000, L"%s\\copilot.exe", folder.c_str());
+		return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+	}
+
+
+	std::wstring ChangeSlash(const wchar_t* s)
+	{
+		std::wstring r = s;
+		for (size_t i = 0; i < r.size(); i++)
+		{
+			if (r[i] == L'\\')
+				r[i] = L'/';
+		}
+		return r;
+	}
+
+	std::wstring TempFile(const wchar_t* etx)
+	{
+		wchar_t path[1000] = {};
+		GetTempPathW(1000, path);
+		wchar_t fi[1000] = {};
+		GetTempFileNameW(path, etx ? etx : L"tmp", 0, fi);
+		DeleteFileW(fi);
+		std::wstring s = fi;
+		if (etx)
+		{
+			s += L".";
+			s += etx;
+		}
+		return s;
+	}
+
+	HANDLE Run(const wchar_t* y, bool W, DWORD flg)
+	{
+		PROCESS_INFORMATION pInfo = { 0 };
+		STARTUPINFO sInfo = { 0 };
+
+		sInfo.cb = sizeof(sInfo);
+		wchar_t yy[1000];
+		swprintf_s(yy, 1000, L"%s", y);
+		CreateProcess(0, yy, 0, 0, 0, flg, 0, 0, &sInfo, &pInfo);
+		SetPriorityClass(pInfo.hProcess, IDLE_PRIORITY_CLASS);
+		SetThreadPriority(pInfo.hThread, THREAD_PRIORITY_IDLE);
+		if (W)
+			WaitForSingleObject(pInfo.hProcess, INFINITE);
+		else
+		{
+			CloseHandle(pInfo.hThread);
+			return pInfo.hProcess;
+		}
+		DWORD ec = 0;
+		GetExitCodeProcess(pInfo.hProcess, &ec);
+		CloseHandle(pInfo.hProcess);
+		CloseHandle(pInfo.hThread);
+		return (HANDLE)(unsigned long long)ec;
+	}
+
+
+	std::shared_ptr<std::thread> interactiveThread;
+	std::recursive_mutex promptMutex;
+
+	std::queue<COPILOT_QUESTION> Prompts;
+	std::map<unsigned long long, std::shared_ptr<ANSWER>> Answers;
+
+
+	std::shared_ptr<ANSWER> PushPrompt(const std::wstring& prompt,bool W)
+	{
+		auto answer = std::make_shared<ANSWER>();
+		if (1)
+		{
+			std::lock_guard<std::recursive_mutex> lock(promptMutex);
+			answer->hEvent = CreateEvent(0, FALSE, FALSE, 0);
+			Sleep(50);
+			answer->key = GetTickCount64();
+			Answers[answer->key] = answer;
+			COPILOT_QUESTION q;
+			q.key = answer->key;
+			q.prompt = prompt;
+			Prompts.push(q);
+		}
+		if (W)
+		{
+			WaitForSingleObject(answer->hEvent, INFINITE);
+			ReleaseAnswer(answer->key);
+		}
+		return answer;
+	}
+
+	void ReleaseAnswer(unsigned long long key)
+	{
+		std::lock_guard<std::recursive_mutex> lock(promptMutex);
+		auto it = Answers.find(key);
+		if (it != Answers.end())
+		{
+			Answers.erase(it);
+		}
+	}
+
+	void BeginInteractive()
+	{
+		if (interactiveThread)
+			return;
+		interactiveThread = std::make_shared <std::thread> ([&]()
+			{
+				Interactive([](LPARAM lp) -> COPILOT_QUESTION {
+				
+					COPILOT* pThis = (COPILOT*)lp;
+					for (;;)
+					{
+						size_t sz = 0;
+						if (1)
+						{
+							std::lock_guard<std::recursive_mutex> lock(pThis->promptMutex);
+							sz = pThis->Prompts.size();
+						}
+						if (sz == 0)
+						{
+							Sleep(100);
+							continue;
+						}
+						std::wstring r;
+						std::lock_guard<std::recursive_mutex> lock(pThis->promptMutex);
+						auto fr = pThis->Prompts.front();
+						pThis->Prompts.pop();
+						r = fr.prompt;
+						if (r == L"exit" || r == L"quit")
+							SetEvent(pThis->Answers[fr.key]->hEvent);
+						COPILOT_QUESTION rr;
+						rr.key = fr.key;
+						rr.prompt = r;
+						return rr;
+					}
+
+					}, [](std::wstring response, unsigned long long key,LPARAM lp, bool End) 
+						{
+							COPILOT* pThis = (COPILOT*)lp;
+							std::lock_guard<std::recursive_mutex> lock(pThis->promptMutex);
+							if (End)
+							{
+								SetEvent(pThis->Answers[key]->hEvent);
+								pThis->ReleaseAnswer(key);
+								return;
+							}
+							pThis->Answers[key]->strings.push_back(response);
+
+						}, (LPARAM)this);
+			});
+	}
+
+	void EndInteractive()
+	{
+		if (interactiveThread)
+		{
+			PushPrompt(L"exit", true);
+			interactiveThread->join();
+			interactiveThread.reset();
+			interactiveThread = nullptr;
+		}
+	}
+
+
+	void Interactive(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
+	{	
+		const char* py = R"(
+# import pdb
+import asyncio
+import random
+import sys
+import os
+import time
+from copilot import CopilotClient
+from copilot.tools import define_tool
+from copilot.generated.session_events import SessionEventType
+from copilot import CopilotClient
+from copilot.tools import define_tool
+from copilot.generated.session_events import SessionEventType
+from pydantic import BaseModel, Field
+
+async def main():
+    %s
+    await client.start()
+
+    session = await client.create_session({
+        "model": "%s",
+        "streaming": True,
+    })
+    print("Model: ", "%s")
+
+    a = 1
+    def handle_event(event):
+        nonlocal a
+        if event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
+            with open("%s" + str(a) + ".txt", "w", encoding="utf-8") as f:
+                f.write(event.data.delta_content)
+                f.flush()
+                # also to display
+                print(event.data.delta_content, end="")
+                a = a + 1
+
+    session.on(handle_event)
+
+    b = 1
+    while True:
+        fii = "%s" + str(b) + ".txt"
+        if not os.path.exists(fii):
+            time.sleep(1)
+            continue
+        time.sleep(1)
+        with open(fii, "r",encoding="utf-8") as f:
+            user_input = f.read().strip()
+        # delete the file after reading
+        os.remove(fii)
+        # trim crlf at the end
+        # pdb.set_trace()
+        user_input = user_input.rstrip("\r\n")
+        print("\033[92m",user_input,"\033[0m")
+        if user_input == "exit":
+            print("Exiting interactive session.")
+            break
+        if user_input == "quit":
+            print("Exiting interactive session.")
+            break
+        await session.send_and_wait({"prompt": user_input})
+        print("");
+        b += 1
+        # Indicate end of response
+        with open("%s" + str(a) + ".txt", "w", encoding="utf-8") as f:
+            f.write("--end--")
+            f.flush()
+            a = a + 1
+    
+asyncio.run(main())
+
+
+)";
+
+		PushPopDirX ppd(folder.c_str());
+		auto tf = TempFile(L"py");
+		auto tin = TempFile(nullptr);
+		auto tout = TempFile(nullptr);
+		std::vector<char> data(100000);
+
+		std::string cli = "client = CopilotClient()";
+		if (if_server.length() > 0)
+		{
+			cli = R"(client = CopilotClient({  "cli_url": ")" + if_server + R"(" }))";
+		}
+
+
+		sprintf_s(data.data(), data.size(), py, cli.c_str(), model.c_str(), model.c_str(), toc(ChangeSlash(tout.c_str()).c_str()).c_str(), toc(ChangeSlash(tin.c_str()).c_str()).c_str(), toc(ChangeSlash(tout.c_str()).c_str()).c_str());
+
+		FILE* f = nullptr;
+		_wfopen_s(&f, tf.c_str(), L"wb");
+		fwrite(data.data(), 1, strlen(data.data()), f);
+		fclose(f);
+		std::wstring cmd = L"python \"" + tf + L"\"";
+
+		auto hi = Run(cmd.c_str(), false, flg);
+		int a = 1, b = 1;
+		for (;;)
+		{
+			// If ended ?
+			DWORD ec = 0;
+			GetExitCodeProcess(hi, &ec);
+			if (ec != STILL_ACTIVE)
+				break;
+
+			auto q = pro(lp);
+			std::string prompt = toc(q.prompt.c_str());
+			// write it to tin
+			{
+				std::wstring fn = tin + std::to_wstring(b) + L".txt";
+				FILE* f = nullptr;
+				_wfopen_s(&f, fn.c_str(), L"wb");
+				if (f)
+				{
+					fwrite(prompt.c_str(), 1, prompt.size(), f);
+					fclose(f);
+					b++;
+				}
+			}
+
+			// Now read response
+			for (int sleepcount = 0;  sleepcount < 500 ;)
+			{
+				// If ended ?
+				DWORD ec = 0;
+				GetExitCodeProcess(hi, &ec);
+				if (ec != STILL_ACTIVE)
+					break;
+				auto fn = tout + std::to_wstring(a) + L".txt";
+				FILE* f = nullptr;
+				_wfopen_s(&f, fn.c_str(), L"rb");
+				if (f)
+				{
+					fseek(f, 0, SEEK_END);
+					auto sz = ftell(f);
+					fseek(f, 0, SEEK_SET);
+					std::vector<char> outdata(sz + 1);
+					fread(outdata.data(), 1, sz, f);
+					outdata[sz] = 0;
+					fclose(f);
+					DeleteFileW(fn.c_str());
+					std::wstring o = tou(outdata.data());
+					cb(o,q.key, lp, o == L"--end--");
+					a++;
+					if (o == L"--end--")
+						break;
+				}
+				else
+				{
+					Sleep(100);
+					sleepcount++;
+				}
+			}
+		}
+		CloseHandle(hi);
+		DeleteFileW(tf.c_str());
+
+	}
+
+};
+
