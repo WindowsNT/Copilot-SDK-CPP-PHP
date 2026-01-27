@@ -1,11 +1,14 @@
 # Copilot/LLama SDK for C++
 
-Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows.
+Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
 
-# Installation
+# Copilot Installation
 * Create a folder with python installed 
 * pip install github-copilot-sdk
 * Put [copilot.exe](https://github.com/github/copilot-cli/releases/) in that folder
+
+# LLama Installation
+Create a folder where [llama-server](https://github.com/ggml-org/llama.cpp/releases) is located.
 
 # Usage
 ```cpp
@@ -95,7 +98,7 @@ COPILOT cop(L"f:\\llama\\run","f:\\llama\\models\\mistral-7b-instruct-v0.2.Q5_K_
 ```
 If you have a local LLama-based model, you can instantiate using the above format, giving a local LLama server port.
 PushPrompt will then send requests to the local LLama server instead of the GitHub Copilot server.
-The folder is where [llama-server](https://github.com/ggml-org/llama.cpp/releases) is located.
+
 
 
 # License
