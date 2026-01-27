@@ -17,6 +17,7 @@
 mono_crash.*
 
 inst.bat
+u4.hpp
 
 # Build results
 [Dd]ebug/

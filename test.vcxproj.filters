@@ -22,4 +22,12 @@
   <ItemGroup>
     <None Include="README.md" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="copilot.hpp">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="u4.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
 </Project>
