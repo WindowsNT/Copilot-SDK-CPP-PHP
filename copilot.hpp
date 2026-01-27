@@ -195,19 +195,19 @@ public:
 
 
 
-	std::wstring tou(const char* s)
+	static std::wstring tou(const char* s)
 	{
 		std::vector<wchar_t> buf(strlen(s) + 1);
 		MultiByteToWideChar(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size());
 		return std::wstring(buf.data());
 	}
-	std::string toc(const wchar_t* s)
+	static std::string toc(const wchar_t* s)
 	{
 		std::vector<char> buf(wcslen(s) * 4 + 1);
 		WideCharToMultiByte(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size(), 0, 0);
 		return std::string(buf.data());
 	}
-	std::wstring ChangeSlash(const wchar_t* s)
+	static std::wstring ChangeSlash(const wchar_t* s)
 	{
 		std::wstring r = s;
 		for (size_t i = 0; i < r.size(); i++)
@@ -370,7 +370,43 @@ public:
 			wchar_t m[MAX_PATH] = { 0 };
 			wcscpy_s(m, MAX_PATH, p);
 			CoTaskMemFree(p);
-			wcscat_s(m, MAX_PATH, L"\\{721FA716-F32C-4CBA-A9EC-0B43070FBE36}");
+			wcscat_s(m, MAX_PATH, L"\\933bd016-0397-42c9-b3e0-eaa7900ef53e");
+			SHCreateDirectory(0, m);
+			prjf = m;
+		}
+		return prjf;
+	}
+
+
+	static std::wstring GetDefaultLLamafolder()
+	{
+		// Check registry for unchanged
+		HKEY k = 0;
+		std::wstring where;
+		RegOpenKeyExW(HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{5B2C72B7-E396-41CE-801D-EDA93EB4BA77}", 0, KEY_READ | KEY_WOW64_64KEY, &k);
+		if (k)
+		{
+			wchar_t buf[MAX_PATH] = { 0 };
+			DWORD sz = sizeof(buf);
+			RegQueryValueExW(k, L"Where", 0, 0, (LPBYTE)buf, &sz);
+			where = buf;
+			RegCloseKey(k);
+			if (where.length() > 2)
+			{
+				where += L"\\LLama";
+				return where;
+			}
+		}
+		// Else, in programdata
+		PWSTR p = 0;
+		SHGetKnownFolderPath(FOLDERID_ProgramData, 0, 0, &p);
+		std::wstring prjf;
+		if (p)
+		{
+			wchar_t m[MAX_PATH] = { 0 };
+			wcscpy_s(m, MAX_PATH, p);
+			CoTaskMemFree(p);
+			wcscat_s(m, MAX_PATH, L"\\059B885A-76DF-4436-8BD6-45FB92A14103");
 			SHCreateDirectory(0, m);
 			prjf = m;
 		}
@@ -433,7 +469,7 @@ public:
 				}
 				STDINOUT2* io = new STDINOUT2();
 				io->Prep(false);
-				io->CreateChildProcess(folder.c_str(), cmdline.data());
+				io->CreateChildProcess(folder.c_str(), cmdline.data(),flg == CREATE_NEW_CONSOLE ? true : false);
 				if (1)
 				{
 					std::vector<char> buffer(4096);
@@ -445,7 +481,9 @@ public:
 						if (!res || read == 0)
 							break;
 						buffer[read] = 0;
-						output += std::string(buffer.data(), read);
+						auto strx = std::string(buffer.data(), read);
+						std::cout << strx;
+						output +=  strx;
 						if (output.find("erver is listening on") != std::string::npos)
 							break;
 					}
@@ -610,6 +648,7 @@ public:
 					}
 					else
 					{
+						re.ReadToMemory(hr, resp);
 						auto str = std::string(resp.data(), resp.size());
 						try
 						{

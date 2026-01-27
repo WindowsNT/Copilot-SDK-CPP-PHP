@@ -74,7 +74,7 @@ public:
 		return true;
 	}
 
-	bool CreateChildProcess(const wchar_t* cd,wchar_t* szCmdline)
+	bool CreateChildProcess(const wchar_t* cd,wchar_t* szCmdline,bool Show)
 	{
 		BOOL bSuccess = FALSE;
 
@@ -95,7 +95,7 @@ public:
 			NULL,          // process security attributes 
 			NULL,          // primary thread security attributes 
 			TRUE,          // handles are inherited 
-			CREATE_NO_WINDOW,             // creation flags 
+			Show ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW,             // creation flags 
 			NULL,          // use parent's environment 
 			cd,          // use parent's current directory 
 			&siStartInfo,  // STARTUPINFO pointer 
