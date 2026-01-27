@@ -1,4 +1,4 @@
-# Copilot SDK for C++
+# Copilot/LLama SDK for C++
 
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows.
 
@@ -14,7 +14,12 @@ Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and her
 COPILOT cop(L"c:\\copilot_folder");
 cop.flg = CREATE_NEW_CONSOLE; // to display the python console for debugging
 cop.BeginInteractive();
-auto ans = cop.PushPrompt(L"Tell me a joke",true);
+auto ans = cop.PushPrompt(L"Tell me a joke",true, [](std::string tok, LPARAM lp)->HRESULT
+        {
+            COPILOT* cop = (COPILOT*)lp;
+            std::wcout << cop->tou(tok.c_str());
+            return S_OK;
+        }, (LPARAM)&cop);
 std::wstring s;
 for (auto& str : ans->strings)
     s += str;
@@ -22,7 +27,8 @@ MessageBox(0, s.c_str(), 0, 0);
 cop.EndInteractive();
 ```
 
-* PushPrompt's last parameter is whether to wait for the response. If false, then the "ans" structure includes a HANDLE event to be triggered when the response is ready.
+* PushPrompt's true/false parameter is whether to wait for the response. If false, then the "ans" structure includes a HANDLE event to be triggered when the response is ready.
+* You can provide a callback function to receive tokens as they arrive.
 * COPILOT constructor is
 ```cpp
 COPILOT(std::wstring folder, std::string model = "gpt-4.1",std::string if_server = "",int LLamaPort = 0)

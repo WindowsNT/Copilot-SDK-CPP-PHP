@@ -15,10 +15,38 @@
 #include <map>
 #include <sstream>
 #include <wininet.h>
+#include <dxgi.h>
+#include <atlbase.h>
+#include <dxgi1_2.h>
+#pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "wininet.lib")
 
 #include "stdinout2.h"
 #include "rest.h"
 #include "json.hpp"
+
+
+const UINT VENDOR_NVIDIA = 0x10DE;
+const UINT VENDOR_AMD = 0x1002;
+const UINT VENDOR_INTEL = 0x8086;
+
+struct GpuCaps
+{
+	bool hasNvidia = false;
+	bool hasAmd = false;
+	bool hasIntel = false;
+	bool intelArc = false;
+};
+
+enum class LlamaBackend
+{
+	CUDA,
+	Vulkan,
+	SYCL,
+	CPU
+};
+
+
 
 struct TOOL_PARAM
 {
@@ -65,6 +93,8 @@ struct COPILOT_QUESTION
 {
 	std::wstring prompt;
 	unsigned long long key = 0;
+	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
+	LPARAM lpx = 0;
 };
 
 struct COPILOT_ANSWER
@@ -72,6 +102,8 @@ struct COPILOT_ANSWER
 	std::vector<std::wstring> strings;
 	HANDLE hEvent = 0;
 	unsigned long long key = 0;
+	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
+	LPARAM lpx = 0;
 	~COPILOT_ANSWER()
 	{
 		if (hEvent)
@@ -132,6 +164,7 @@ class COPILOT
 	std::queue<COPILOT_QUESTION> Prompts;
 	struct MESSAGE_AND_REPLY
 	{
+		bool System = 0;
 		std::wstring message;
 		std::wstring reply;
 	};
@@ -247,6 +280,68 @@ public:
 	};
 
 
+
+	static GpuCaps DetectGpuCaps()
+	{
+		GpuCaps caps;
+
+		CComPtr<IDXGIFactory1> factory;
+		if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory))))
+			return caps;
+
+		for (UINT i = 0; ; ++i)
+		{
+			CComPtr<IDXGIAdapter1> adapter;
+			if (factory->EnumAdapters1(i, &adapter) == DXGI_ERROR_NOT_FOUND)
+				break;
+
+			DXGI_ADAPTER_DESC1 desc;
+			adapter->GetDesc1(&desc);
+
+			// Skip software adapter
+			if (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE)
+				continue;
+
+			switch (desc.VendorId)
+			{
+			case VENDOR_NVIDIA:
+				caps.hasNvidia = true;
+				break;
+
+			case VENDOR_AMD:
+				caps.hasAmd = true;
+				break;
+
+			case VENDOR_INTEL:
+				caps.hasIntel = true;
+				if (desc.DedicatedVideoMemory > (2ull << 30))
+					caps.intelArc = true;
+				break;
+			}
+		}
+
+		return caps;
+	}
+
+
+	static LlamaBackend ChooseBackend(const GpuCaps& caps)
+	{
+		if (caps.hasNvidia)
+			return LlamaBackend::CUDA;
+
+		if (caps.hasAmd)
+			return LlamaBackend::Vulkan;
+
+		if (caps.intelArc)
+			return LlamaBackend::SYCL;
+
+		if (caps.hasIntel)
+			return LlamaBackend::Vulkan;
+
+		return LlamaBackend::CPU;
+	}
+
+
 	static std::wstring GetDefaultCopilotfolder()
 	{
 		// Check registry for unchanged
@@ -292,7 +387,7 @@ public:
 
 
 
-	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W)
+	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W, HRESULT(__stdcall* cb1)(std::string token, LPARAM lp) = 0,LPARAM lpx = 0)
 	{
 		auto answer = std::make_shared<COPILOT_ANSWER>();
 		if (1)
@@ -301,10 +396,14 @@ public:
 			answer->hEvent = CreateEvent(0, FALSE, FALSE, 0);
 			Sleep(50);
 			answer->key = GetTickCount64();
+			answer->cb1 = cb1;
+			answer->lpx = lpx;
 			Answers[answer->key] = answer;
 			COPILOT_QUESTION q;
 			q.key = answer->key;
 			q.prompt = prompt;
+			q.cb1 = cb1;
+			q.lpx = lpx;
 			Prompts.push(q);
 		}
 		if (W)
@@ -325,6 +424,13 @@ public:
 			{
 				std::vector<wchar_t> cmdline(1000);
 				swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe --n-gpu-layers 999 -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
+				// Or cpu only
+				GpuCaps caps = DetectGpuCaps();
+				LlamaBackend backend = ChooseBackend(caps);
+				if (backend == LlamaBackend::CPU)
+				{
+					swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe  -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
+				}
 				STDINOUT2* io = new STDINOUT2();
 				io->Prep(false);
 				io->CreateChildProcess(folder.c_str(), cmdline.data());
@@ -377,6 +483,8 @@ public:
 					nlohmann::json j;
 					j["model"] = "model";
 					j["temperature"] = temperature;
+					if (fr.cb1)
+						j["stream"] = true;
 					j["top_k"] = top_k;
 					j["top_p"] = top_p;
 					j["repeat_penalty"] = repeat_penalty;
@@ -386,16 +494,16 @@ public:
 					{
 						nlohmann::json mm;
 						mm["role"] = "user";
-						mm["content"] = s.message;
+						mm["content"] = toc(s.message.c_str()).c_str();
 						messages.push_back(mm);
 						nlohmann::json mr;
 						mr["role"] = "assistant";
-						mr["content"] = s.reply;
+						mr["content"] = toc(s.reply.c_str()).c_str();
 						messages.push_back(mr);
 					}
 					nlohmann::json mm;
 					mm["role"] = "user";
-					mm["content"] = toc(r.c_str());
+					mm["content"] = toc(r.c_str()).c_str();
 					messages.push_back(mm);
 					j["messages"] = messages;
 
@@ -406,38 +514,131 @@ public:
 					RESTAPI::REST re;
 					re.Connect(L"localhost", false, LLama);
 					auto hr = re.RequestWithBuffer(L"/v1/chat/completions", L"POST", {}, buf.data(), buf.size());
-					std::vector<char> resp;
-					re.ReadToMemory(hr, resp);
-					auto str = std::string(resp.data(), resp.size());
-
 					std::string response;
-					try
+
+
+					std::vector<char> resp;
+					struct D
 					{
-						nlohmann::json j = nlohmann::json::parse(str);
-						if (j.contains("choices"))
-						{
-							auto& choices = j["choices"];
-							if (choices.is_array() && choices.size())
+						std::vector<char>* resp;
+						RESTAPI::memory_data_writer* w;
+						COPILOT* pThis;
+						COPILOT_QUESTION* fr = 0;
+						std::string* response = 0;
+					};
+					RESTAPI::memory_data_writer w;
+
+					if (fr.cb1)
+					{
+						D d;
+						d.resp = &resp;
+						d.pThis = this;
+						d.w = &w;
+						d.fr = &fr;
+						d.response = &response;
+						re.Read2(hr, w, [](size_t total_sent, size_t tot, void* lp) -> HRESULT
 							{
-								auto& first = choices[0];
-								if (first.contains("message"))
+								D* pThis = (D*)lp;
+								std::vector<char>& g = pThis->w->GetP();
+								auto ptr = g.data();
+								ptr += pThis->resp->size();
+
+								// copy it to resp
+								auto old_size = pThis->resp->size();
+								pThis->resp->resize(total_sent);
+								memcpy(pThis->resp->data() + old_size, ptr, total_sent - old_size);
+
+								// this is data: 
+								for (;;)
 								{
-									auto& message = first["message"];
-									if (message.contains("content"))
+									auto str = strstr(ptr, "data: ");
+									if (!str)
+										return S_OK;
+									str += 5;
+
+									auto endline = strstr(str, "\n\n");
+									if (!endline)
+										return S_OK;
+									std::string line(str, endline - str);
+
+									// advance ptr
+									ptr = endline + 2;
+
+									if (line == "[DONE]" || line == " [DONE]")
 									{
-										response =  message["content"].get<std::string>();
-										std::lock_guard<std::recursive_mutex> lock(promptMutex);
-										auto ans = Answers[fr.key];
-										ans->strings.push_back(tou(response.c_str()));
+										std::lock_guard<std::recursive_mutex> lock(pThis->pThis->promptMutex);
+										auto ans = pThis->pThis->Answers[pThis->fr->key];
+										// fill response
+										for (auto& s : ans->strings)
+											*(pThis->response) += pThis->pThis->toc(s.c_str());
 										SetEvent(ans->hEvent);
-										ReleaseAnswer(fr.key);
+										pThis->pThis->ReleaseAnswer(pThis->fr->key);
+										return S_OK;
+									}
+									try
+									{
+										nlohmann::json j = nlohmann::json::parse(line);
+										if (j.contains("choices"))
+										{
+											auto& choices = j["choices"];
+											if (choices.is_array() && choices.size())
+											{
+												auto& first = choices[0];
+												if (first.contains("delta"))
+												{
+													auto& delta = first["delta"];
+													if (delta.contains("content"))
+													{
+														auto content = delta["content"].get<std::string>();
+														std::lock_guard<std::recursive_mutex> lock(pThis->pThis->promptMutex);
+														auto ans = pThis->pThis->Answers[pThis->fr->key];
+														ans->strings.push_back(pThis->pThis->tou(content.c_str()));
+														// Call callback
+														if (pThis->fr->cb1)
+															pThis->fr->cb1(content, pThis->fr->lpx);
+													}
+												}
+											}
+										}
+									}
+									catch (...)
+									{
+									}
+								}
+								return S_OK;
+							}, &d);
+					}
+					else
+					{
+						auto str = std::string(resp.data(), resp.size());
+						try
+						{
+							nlohmann::json j = nlohmann::json::parse(str);
+							if (j.contains("choices"))
+							{
+								auto& choices = j["choices"];
+								if (choices.is_array() && choices.size())
+								{
+									auto& first = choices[0];
+									if (first.contains("message"))
+									{
+										auto& message = first["message"];
+										if (message.contains("content"))
+										{
+											response = message["content"].get<std::string>();
+											std::lock_guard<std::recursive_mutex> lock(promptMutex);
+											auto ans = Answers[fr.key];
+											ans->strings.push_back(tou(response.c_str()));
+											SetEvent(ans->hEvent);
+											ReleaseAnswer(fr.key);
+										}
 									}
 								}
 							}
 						}
-					}
-					catch (...)
-					{
+						catch (...)
+						{
+						}
 					}
 
 					// Post entire history
@@ -490,6 +691,8 @@ public:
 						COPILOT_QUESTION rr;
 						rr.key = fr.key;
 						rr.prompt = r;
+						rr.cb1 = fr.cb1;
+						rr.lpx = fr.lpx;
 						return rr;
 					}
 
@@ -504,6 +707,8 @@ public:
 								return;
 							}
 							pThis->Answers[key]->strings.push_back(response);
+							if (pThis->Answers[key]->cb1)
+								pThis->Answers[key]->cb1(pThis->toc(response.c_str()), pThis->Answers[key]->lpx);
 
 						}, (LPARAM)this);
 			});
