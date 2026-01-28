@@ -2,10 +2,39 @@
 #include ".\\copilot.hpp"
 #pragma comment(lib,"wininet.lib")
 
+void TestOpenAI()
+{
+    COPILOT cop(L"", "Gemini", "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent", 0,
+        L"your_api_key");
+    cop.flg = CREATE_NEW_CONSOLE;
+    cop.BeginInteractive();
+
+    std::cout << "Enter your prompts, type exit to quit." << std::endl;
+    for (;;)
+    {
+        std::wstring prompt;
+        // get entire line
+        printf("\033[92m");
+        std::getline(std::wcin, prompt);
+        printf("\033[0m");
+        if (prompt == L"exit" || prompt == L"quit")
+            break;
+        auto ans = cop.PushPrompt(prompt, true, [](std::string tok, LPARAM lp)->HRESULT
+            {
+                COPILOT* cop = (COPILOT*)lp;
+                std::wcout << cop->tou(tok.c_str());
+                return S_OK;
+            }, (LPARAM)&cop);
+        std::wcout << std::endl;
+    }
+    cop.EndInteractive();
+
+}
+
 
 void TestLLama()
 {
-    COPILOT cop(L"f:\\llama\\run", "f:\\llama\\models\\mistral-7b-instruct-v0.2.Q5_K_M.gguf", "", 9991);
+    COPILOT cop(L"f:\\llama\\run", "f:\\llama\\models\\mistral-7b-v0.1.Q2_K.gguf", "", 9991);
     cop.flg = CREATE_NEW_CONSOLE;
     cop.BeginInteractive();
 
@@ -69,6 +98,7 @@ int main()
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hOut, dwMode);
 
+//    TestOpenAI();
     TestLLama();
     TestCopilot();
 }

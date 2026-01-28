@@ -159,6 +159,7 @@ class COPILOT
 	}
 
 	std::shared_ptr<std::thread> interactiveThread;
+	HANDLE hLLamaProcess = 0;
 	std::recursive_mutex promptMutex;
 
 	std::queue<COPILOT_QUESTION> Prompts;
@@ -189,7 +190,7 @@ class COPILOT
 	}
 
 	std::vector<DLL_LIST> dlls;
-
+	std::wstring api_key;
 
 public:
 
@@ -224,12 +225,14 @@ public:
 #else
 	DWORD flg = CREATE_NO_WINDOW;
 #endif
-	COPILOT(std::wstring folder, std::string model = "gpt-4.1",std::string if_server = "",int LLama = 0)
+	COPILOT(std::wstring folder, std::string model = "gpt-4.1",std::string if_server = "",int LLama = 0,const wchar_t* apikey = 0)
 	{
 		this->folder = folder;
 		this->model = model;
 		this->if_server = if_server;	
 		this->LLama = LLama;
+		if (apikey)
+			this->api_key = apikey;
 	}
 	~COPILOT()
 	{
@@ -458,36 +461,40 @@ public:
 
 		interactiveThread = std::make_shared <std::thread>([&]()
 			{
-				std::vector<wchar_t> cmdline(1000);
-				swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe --n-gpu-layers 999 -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
-				// Or cpu only
-				GpuCaps caps = DetectGpuCaps();
-				LlamaBackend backend = ChooseBackend(caps);
-				if (backend == LlamaBackend::CPU)
+				if (if_server.length() == 0)
 				{
-					swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe  -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
-				}
-				STDINOUT2* io = new STDINOUT2();
-				io->Prep(false);
-				io->CreateChildProcess(folder.c_str(), cmdline.data(),flg == CREATE_NEW_CONSOLE ? true : false);
-				if (1)
-				{
-					std::vector<char> buffer(4096);
-					std::string output;
-					for (;;)
+					std::vector<wchar_t> cmdline(1000);
+					swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe --n-gpu-layers 999 -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
+					// Or cpu only
+					GpuCaps caps = DetectGpuCaps();
+					LlamaBackend backend = ChooseBackend(caps);
+					if (backend == LlamaBackend::CPU)
 					{
-						DWORD read = 0;
-						BOOL res = ReadFile(io->g_hChildStd_OUT_Rd, buffer.data(), (DWORD)buffer.size() - 1, &read, NULL);
-						if (!res || read == 0)
-							break;
-						buffer[read] = 0;
-						auto strx = std::string(buffer.data(), read);
-						output +=  strx;
-						if (output.find("erver is listening on") != std::string::npos)
-							break;
+						swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe  -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
 					}
-				}
+					STDINOUT2* io = new STDINOUT2();
+					io->Prep(false);
+					io->CreateChildProcess(folder.c_str(), cmdline.data(), flg == CREATE_NEW_CONSOLE ? true : false);
+					if (1)
+					{
+						std::vector<char> buffer(4096);
+						std::string output;
+						for (;;)
+						{
+							DWORD read = 0;
+							BOOL res = ReadFile(io->g_hChildStd_OUT_Rd, buffer.data(), (DWORD)buffer.size() - 1, &read, NULL);
+							if (!res || read == 0)
+								break;
+							buffer[read] = 0;
+							auto strx = std::string(buffer.data(), read);
+							output += strx;
+							if (output.find("erver is listening on") != std::string::npos)
+								break;
+						}
+					}
+					hLLamaProcess =io->piProcInfo.hProcess;
 
+				}
 				for (;;)
 				{
 					size_t sz = 0;
@@ -511,10 +518,35 @@ public:
 						SetEvent(Answers[fr.key]->hEvent);
 						ReleaseAnswer(fr.key);
 						// Terminate llama-server
-						TerminateProcess(io->piProcInfo.hProcess, 0);
+						if (hLLamaProcess)
+							TerminateProcess(hLLamaProcess, 0);
+						hLLamaProcess = 0;
 						break;
 					}
 
+
+					std::wstring Auth;
+					std::wstring ver;
+					if (api_key.length())
+					{
+						if (model == "Claude")
+						{
+							Auth = L"x-api-key: ";
+							Auth += api_key.c_str();
+							ver = L"anthropic-version: 2023-06-01";
+						}
+						else
+						if (model == "Gemini")
+						{
+							Auth = L"x-goog-api-key: ";
+							Auth += api_key.c_str();
+						}
+						else
+						{
+							Auth = L"Authorization: Bearer ";
+							Auth += api_key.c_str();
+						}
+					}
 
 					// Build buf
 					nlohmann::json j;
@@ -548,9 +580,27 @@ public:
 
 
 
+					RESTAPI::ihandle hr;
 					RESTAPI::REST re;
-					re.Connect(L"localhost", false, (short)LLama);
-					auto hr = re.RequestWithBuffer(L"/v1/chat/completions", L"POST", {}, buf.data(), buf.size());
+					if (if_server.length() == 0)
+					{
+						re.Connect(L"localhost", false, (short)LLama);
+						hr = re.RequestWithBuffer(L"/v1/chat/completions", L"POST", {}, buf.data(), buf.size());
+					}
+					else
+					{
+						std::wstring url = tou(if_server.c_str());
+						url += L"/v1/chat/completions";
+
+						std::wstring ContentType = L"Content-Type: application/json";
+						std::wstring ContentLength;
+						std::wstring Connection = L"Connection: close";
+						wchar_t clbuf[100] = {};
+						swprintf_s(clbuf, 100, L"Content-Length: %zu", buf.size());
+						ContentLength = clbuf;
+
+						hr = re.RequestWithBuffer(url.c_str(), L"POST", { ContentType,ContentLength,Connection,Auth,ver }, buf.data(), buf.size());
+					}
 					std::string response;
 
 
@@ -573,7 +623,7 @@ public:
 						d.w = &w;
 						d.fr = &fr;
 						d.response = &response;
-						re.Read2(hr, w, [](size_t total_sent, size_t tot, void* lp) -> HRESULT
+						re.Read2(hr, w, [](size_t total_sent, size_t, void* lp) -> HRESULT
 							{
 								D* pThis = (D*)lp;
 								std::vector<char>& g = pThis->w->GetP();
@@ -632,7 +682,15 @@ public:
 														ans->strings.push_back(pThis->pThis->tou(content.c_str()));
 														// Call callback
 														if (pThis->fr->cb1)
-															pThis->fr->cb1(content, pThis->fr->lpx);
+														{
+															auto ef = pThis->fr->cb1(content, pThis->fr->lpx);
+															if (FAILED(ef))
+															{
+																SetEvent(ans->hEvent);
+																pThis->pThis->ReleaseAnswer(pThis->fr->key);
+																return S_OK;
+															}
+														}
 													}
 												}
 											}
@@ -642,7 +700,6 @@ public:
 									{
 									}
 								}
-								return S_OK;
 							}, &d);
 					}
 					else
@@ -696,7 +753,7 @@ public:
 	{
 		if (interactiveThread)
 			return;
-		if (LLama)
+		if (LLama || api_key.length())
 		{
 			BeginInteractiveLLama();
 			return;
