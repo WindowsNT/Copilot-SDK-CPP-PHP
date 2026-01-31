@@ -4,5 +4,7 @@
     <Platform Name="x86" />
   </Configurations>
   <Project Path="dlltool.vcxproj" Id="21fce622-a00e-41f7-95b4-c7baf5d8d4bc" />
-  <Project Path="test.vcxproj" Id="2bbd69d9-c846-4176-88a8-5d5701149d18" />
+  <Project Path="test.vcxproj" Id="2bbd69d9-c846-4176-88a8-5d5701149d18">
+    <BuildDependency Project="dlltool.vcxproj" />
+  </Project>
 </Solution>
