@@ -15,10 +15,39 @@ Download and run [Ollama](https://ollama.com/), specify to make it visible to th
 
 # Usage
 ```cpp
+struct COPILOT_PARAMETERS
+{
+	std::wstring folder;
+	std::string model = "gpt-4.1";
+	std::string remote_server;
+	int LLama_Port = 0;
+	std::wstring api_key;
+	std::string reasoning_effort = "";
+	std::string custon_provider_type; // example  openai for ollama
+	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
+#ifdef _DEBUG
+	bool Debug = 1;
+#else
+	bool Debug = 0;
+#endif
+};
+
+Where
+ - folder: folder where copilot.exe and python are located, or llama-server for local LLama models
+ - model: model name, for Copilot use "gpt-4.1" or other supported models (copilot_model_list()) , for local LLama use the model name loaded in llama-server, for Ollama use the model name available in Ollama
+ - remote_server: For LLama use "localhost"
+ - LLama_Port: For LLama use the port where llama-server is running
+ - api_key: API key for Copilot or other providers
+ - reasoning_effort: optional parameter for Copilot, can be "low", "medium", "high", "xhigh"
+ - custon_provider_type: For Ollama, can be "openai" "azure" etc
+ - custom_provider_base_url: For Ollama, use "http://localhost:11434/v1"
+ - Debug: enable debug output
+
 #include "copilot.h"
 #include <iostream>
-COPILOT cop(L"c:\\copilot_folder");
-cop.flg = CREATE_NEW_CONSOLE; // to display the python console for debugging
+COPILOT_PARAMETERS cp;
+cp.folder = L"f:\\copilot";
+COPILOT cop(cp);
 cop.BeginInteractive();
 auto ans = cop.PushPrompt(L"Tell me a joke",true, [](std::string tok, LPARAM lp)->HRESULT
         {
@@ -39,7 +68,6 @@ cop.EndInteractive();
 
 # Tool definition
 ```cpp
-
 // Example of adding a tool from a dll
 
 // DLL code
@@ -88,22 +116,26 @@ auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026",tr
 This adds a tool to Copilot that calls the pcall function in the dlltool.dll. The pcall function receives a json string with the tool parameters and must return a json string with the tool results.
 Currently, it returns hardcoded "temperature": "14C", but you can modify it to call a weather API.
 
-# Running a local LLama-based model
-```cpp
-COPILOT cop(L"f:\\llama\\run","f:\\llama\\models\\mistral-7b-instruct-v0.2.Q5_K_M.gguf","",9991);
-```
-If you have a local LLama-based model, you can instantiate using the above format, giving a local LLama server port. f:\\llama\\run should be the [llama-server](https://github.com/ggml-org/llama.cpp/releases) location.
-PushPrompt will then send requests to the local LLama server instead of the GitHub Copilot server.
 
-# Connecting to Ollama
+# Connect to LLama
 ```cpp
-COPILOT_CUSTOM_PROVIDER cp;
-cp.type = "openai";
-cp.base_url = "http://localhost:11434";
-COPILOT cop(L"f:\\copilot", "deepseek-r1:8b", "", 0, optional_api_key, 0, &cp);
+COPILOT_PARAMETERS cp;
+cp.folder = L"f:\\llama\\run";
+cp.model = "f:\\llama\\models\\mistral-7b-v0.1.Q2_K.gguf";
+cp.LLama_Port = 9991;   
+COPILOT cop(cp);
 ```
-This will reuse an existing Ollama server with the specified model. You can also use any other provider that requires an API key, such as OpenAI, Azure etc. 
 
+
+# Connect to Ollama
+```cpp
+COPILOT_PARAMETERS cp;
+cp.custon_provider_type = "openai";    
+cp.custom_provider_base_url = "http://localhost:11434/v1";
+cp.folder = L"f:\\copilot";
+cp.model = "qwen3-coder:30b";
+COPILOT cop(cp);
+``` 
 
 # License
 MIT

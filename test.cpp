@@ -38,10 +38,44 @@ void TestOpenAI()
 }
 */
 
+void AskQuestion(COPILOT& cop,bool Tool)
+{
+    if (Tool)
+    {
+        auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026", true, [](std::string tok, LPARAM lp)->HRESULT
+            {
+                COPILOT* cop = (COPILOT*)lp;
+                std::wcout << cop->tou(tok.c_str());
+                return S_OK;
+            }, (LPARAM)&cop);
+        std::wstring s;
+        for (auto& str : ans->strings)
+            s += str;
+        MessageBox(0, s.c_str(), 0, 0);
+    }
+    if (1)
+    {
+        auto ans = cop.PushPrompt(L"Tell me about WW1", true, [](std::string tok, LPARAM lp)->HRESULT
+            {
+                COPILOT* cop = (COPILOT*)lp;
+                std::wcout << cop->tou(tok.c_str());
+                return S_OK;
+            }, (LPARAM)&cop);
+        std::wstring s;
+        s.clear();
+        for (auto& str : ans->strings)
+            s += str;
+        MessageBox(0, s.c_str(), 0, 0);
+    }
+}
+
 void TestLLama()
 {
-    COPILOT cop(L"f:\\llama\\run", "f:\\llama\\models\\mistral-7b-v0.1.Q2_K.gguf", "", 9991);
-    cop.flg = CREATE_NEW_CONSOLE;
+	COPILOT_PARAMETERS cp;
+	cp.folder = L"f:\\llama\\run";
+	cp.model = "f:\\llama\\models\\mistral-7b-v0.1.Q2_K.gguf";
+	cp.LLama_Port = 9991;   
+    COPILOT cop(cp);
     cop.BeginInteractive();
 
 	std::cout << "Enter your prompts, type exit to quit." << std::endl;
@@ -68,8 +102,9 @@ void TestLLama()
 
 void TestCopilot()
 {
-    COPILOT cop(L"f:\\copilot");
-    cop.flg = CREATE_NEW_CONSOLE;
+	COPILOT_PARAMETERS cp;
+	cp.folder = L"f:\\copilot";
+    COPILOT cop(cp);
 
     std::vector<wchar_t> dll_path(1000);
     GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
@@ -81,51 +116,22 @@ void TestCopilot()
         });
 
     cop.BeginInteractive();
-    auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026", true, [](std::string tok, LPARAM lp)->HRESULT
-        {
-            COPILOT* cop = (COPILOT*)lp;
-            std::wcout << cop->tou(tok.c_str());
-            return S_OK;
-        }, (LPARAM)&cop);
-    std::wstring s;
-    for (auto& str : ans->strings)
-        s += str;
-    MessageBox(0, s.c_str(), 0, 0);
-    ans = cop.PushPrompt(L"Tell me about WW1", true, [](std::string tok, LPARAM lp)->HRESULT
-        {
-            COPILOT* cop = (COPILOT*)lp;
-            std::wcout << cop->tou(tok.c_str());
-            return S_OK;
-        }, (LPARAM)&cop);
-    s.clear();
-    for (auto& str : ans->strings)
-        s += str;
-    MessageBox(0, s.c_str(), 0, 0);
+	AskQuestion(cop,true);
     cop.EndInteractive();
-
 }
 
 
 void TestOllama()
 {
-    COPILOT_CUSTOM_PROVIDER cp;
-    cp.type = "openai";
-    
-    cp.base_url = "http://localhost:11434/v1";
-    COPILOT cop(L"f:\\copilot", "deepseek-r1:8b", "", 0, nullptr, 0, &cp);
-
-    cop.flg = CREATE_NEW_CONSOLE;
+    COPILOT_PARAMETERS cp;
+    cp.custon_provider_type = "openai";    
+    cp.custom_provider_base_url = "http://localhost:11434/v1";
+	cp.folder = L"f:\\copilot";
+    cp.model = "qwen3-coder:30b";
+//    cp.model = "deepseek-r1:8b";
+    COPILOT cop(cp);
     cop.BeginInteractive();
-    auto ans = cop.PushPrompt(L"Hello there", true, [](std::string tok, LPARAM lp)->HRESULT
-        {
-            COPILOT* cop = (COPILOT*)lp;
-            std::wcout << cop->tou(tok.c_str());
-            return S_OK;
-        }, (LPARAM)&cop);
-    std::wstring s;
-    for (auto& str : ans->strings)
-        s += str;
-    MessageBox(0, s.c_str(), 0, 0);
+    AskQuestion(cop,false);
     cop.EndInteractive();
 }
 
@@ -140,6 +146,6 @@ int main()
 
 //    TestOpenAI();
 //    TestLLama();
-    TestCopilot();
+      TestCopilot();
 //    TestOllama();
 }

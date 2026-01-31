@@ -50,12 +50,6 @@ enum class LlamaBackend
 
 
 
-struct COPILOT_CUSTOM_PROVIDER
-{
-	std::string type; // example  openai for ollama
-	std::string base_url; //  "http://localhost:11434/v1"; // Example Ollama
-}
-;
 
 struct TOOL_PARAM
 {
@@ -128,14 +122,27 @@ struct COPILOT_MODEL
 	bool Premium = 0;
 };
 
-class COPILOT
+struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
 	std::string model = "gpt-4.1";
+	std::string remote_server;
+	int LLama_Port = 0;
+	std::wstring api_key;
 	std::string reasoning_effort = "";
-	COPILOT_CUSTOM_PROVIDER custom_copilot_provider;
-	std::string if_server = "";
-	int LLama = 0;
+	std::string custon_provider_type; // example  openai for ollama
+	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
+#ifdef _DEBUG
+	bool Debug = 1;
+#else
+	bool Debug = 0;
+#endif
+};
+
+class COPILOT
+{
+	COPILOT_PARAMETERS cp;
+
 	std::wstring TempFile(const wchar_t* etx)
 	{
 		wchar_t path[1000] = {};
@@ -209,7 +216,6 @@ class COPILOT
 	}
 
 	std::vector<DLL_LIST> dlls;
-	std::wstring api_key;
 	HANDLE hFM = 0, hFO = 0, hEI = 0, hEO = 0;
 	void* p1 = 0;
 	void* p2 = 0;
@@ -274,23 +280,9 @@ public:
 	}
 
 
-#ifdef _DEBUG
-	DWORD flg = CREATE_NEW_CONSOLE;
-#else
-	DWORD flg = CREATE_NO_WINDOW;
-#endif
-	COPILOT(std::wstring folder, std::string model = "gpt-4.1",std::string if_server = "",int LLama = 0,const wchar_t* apikey = 0,const char* reasoning_effort = 0, COPILOT_CUSTOM_PROVIDER* custom_provider = 0)
+	COPILOT(COPILOT_PARAMETERS& cx)
 	{
-		this->folder = folder;
-		this->model = model;
-		if (reasoning_effort)
-			this->reasoning_effort = reasoning_effort;
-		this->if_server = if_server;	
-		this->LLama = LLama;
-		if (apikey)
-			this->api_key = apikey;
-		if (custom_provider)
-			this->custom_copilot_provider = *custom_provider;
+		cp = cx;
 	}
 	~COPILOT()
 	{
@@ -487,10 +479,10 @@ public:
 		return prjf;
 	}
 
-	bool IsInstalled()
+	bool IsCopilotInstalled()
 	{
 		wchar_t path[1000] = {};
-		swprintf_s(path, 1000, L"%s\\copilot.exe", folder.c_str());
+		swprintf_s(path, 1000, L"%s\\copilot.exe", cp.folder.c_str());
 		return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
 	}
 
@@ -547,20 +539,18 @@ public:
 
 		interactiveThread = std::make_shared <std::thread>([&]()
 			{
-				if (if_server.length() == 0)
+				if (cp.remote_server.length() == 0)
 				{
 					std::vector<wchar_t> cmdline(1000);
-					swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe --n-gpu-layers 999 -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
+					swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe --n-gpu-layers 999 -m \"%S\" --port %i", cp.folder.c_str(), cp.model.c_str(), cp.LLama_Port);
 					// Or cpu only
 					GpuCaps caps = DetectGpuCaps();
 					LlamaBackend backend = ChooseBackend(caps);
 					if (backend == LlamaBackend::CPU)
-					{
-						swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe  -m \"%S\" --port %i", folder.c_str(), model.c_str(), LLama);
-					}
+						swprintf_s(cmdline.data(), 1000, L"%s\\llama-server.exe  -m \"%S\" --port %i", cp.folder.c_str(), cp.model.c_str(), cp.LLama_Port);
 					STDINOUT2* io = new STDINOUT2();
 					io->Prep(false);
-					io->CreateChildProcess(folder.c_str(), cmdline.data(), flg == CREATE_NEW_CONSOLE ? true : false);
+					io->CreateChildProcess(cp.folder.c_str(), cmdline.data(), cp.Debug);
 					if (1)
 					{
 						std::vector<char> buffer(4096);
@@ -613,24 +603,24 @@ public:
 
 					std::wstring Auth;
 					std::wstring ver;
-					if (api_key.length())
+					if (cp.api_key.length())
 					{
-						if (model == "Claude")
+						if (cp.model == "Claude")
 						{
 							Auth = L"x-api-key: ";
-							Auth += api_key.c_str();
+							Auth += cp.api_key.c_str();
 							ver = L"anthropic-version: 2023-06-01";
 						}
 						else
-						if (model == "Gemini")
+						if (cp.model == "Gemini")
 						{
 							Auth = L"x-goog-api-key: ";
-							Auth += api_key.c_str();
+							Auth += cp.api_key.c_str();
 						}
 						else
 						{
 							Auth = L"Authorization: Bearer ";
-							Auth += api_key.c_str();
+							Auth += cp.api_key.c_str();
 						}
 					}
 
@@ -666,14 +656,14 @@ public:
 
 					RESTAPI::ihandle hr;
 					RESTAPI::REST re;
-					if (if_server.length() == 0)
+					if (cp.remote_server.length() == 0)
 					{
-						re.Connect(L"localhost", false, (short)LLama);
+						re.Connect(L"localhost", false, (short)cp.LLama_Port);
 						hr = re.RequestWithBuffer(L"/v1/chat/completions", L"POST", {}, buf.data(), buf.size());
 					}
 					else
 					{
-						std::wstring url = tou(if_server.c_str());
+						std::wstring url = tou(cp.remote_server.c_str());
 						url += L"/v1/chat/completions";
 
 						std::wstring ContentType = L"Content-Type: application/json";
@@ -837,7 +827,7 @@ public:
 	{
 		if (interactiveThread)
 			return;
-		if (LLama || api_key.length())
+		if (cp.LLama_Port && cp.api_key.length())
 		{
 			BeginInteractiveLLama();
 			return;
@@ -1030,7 +1020,7 @@ asyncio.run(main())
 
 )";
 
-		PushPopDirX ppd(folder.c_str());
+		PushPopDirX ppd(cp.folder.c_str());
 		auto tf = TempFile(L"py");
 #ifdef _DEBUG
 		tf = L"r:\\1.py";
@@ -1043,9 +1033,9 @@ asyncio.run(main())
 		StringFromGUID2(clsid, clsid_buf, 100);
 
 		std::string cli = "client = CopilotClient()";
-		if (if_server.length() > 0)
+		if (cp.remote_server.length() > 0)
 		{
-			cli = R"(client = CopilotClient({  "cli_url": ")" + if_server + R"(" }))";
+			cli = R"(client = CopilotClient({  "cli_url": ")" + cp.remote_server + R"(" }))";
 		}
 
 
@@ -1129,13 +1119,13 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		// model
 		sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
         "model": "%s",
-        "streaming": True,)", model.c_str());
+        "streaming": True,)", cp.model.c_str());
 
 		// reasoning_effort
-		if (this->reasoning_effort.length())
+		if (cp.reasoning_effort.length())
 		{
 			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
-        "reasoning_effort": "%s",)", this->reasoning_effort.c_str());
+        "reasoning_effort": "%s",)", cp.reasoning_effort.c_str());
 		}
 
 		// Tools
@@ -1154,7 +1144,7 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
         ],)");
 		}
 
-		if (custom_copilot_provider.type.length() > 2)
+		if (cp.custon_provider_type.length() > 2)
 		{
 			// build something like 
 			/*
@@ -1167,16 +1157,16 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 
 			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
         "provider": {
-            "type": "%s",)", custom_copilot_provider.type.c_str());
-			if (custom_copilot_provider.base_url.length() > 0)
+            "type": "%s",)", cp.custon_provider_type.c_str());
+			if (cp.custom_provider_base_url.length() > 0)
 			{
 				sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
-            "base_url": "%s",)", custom_copilot_provider.base_url.c_str());
+            "base_url": "%s",)", cp.custom_provider_base_url.c_str());
 			}
-			if (api_key.length() > 0)
+			if (cp.api_key.length() > 0)
 			{
 				sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
-            "api_key": "%S",)", api_key.c_str());
+            "api_key": "%S",)", cp.api_key.c_str());
 			}
 			// end provider
 			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
@@ -1199,7 +1189,7 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		fclose(f);
 		std::wstring cmd = L"python \"" + tf + L"\"";
 
-		hProcess = Run(cmd.c_str(), false, flg);
+		hProcess = Run(cmd.c_str(), false, cp.Debug ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW);
 
 		// Get the shared memory and events
 	
@@ -1330,8 +1320,9 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		}
 
 		CloseHandle(hProcess);
+#ifndef _DEBUG
 		DeleteFileW(tf.c_str());
-
+#endif
 	}
 
 };
