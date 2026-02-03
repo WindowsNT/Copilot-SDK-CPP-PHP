@@ -4,6 +4,7 @@
 #pragma once
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <WS2tcpip.h>
 #include <wincrypt.h>   
 #include <ShlObj.h>
 #include <string>
@@ -22,6 +23,7 @@
 #include <dxgi1_2.h>
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "wininet.lib")
+#pragma comment(lib, "ws2_32.lib")
 
 #include "stdinout2.h"
 #include "rest.h"
@@ -49,6 +51,7 @@ enum class LlamaBackend
 };
 
 
+inline HRESULT OllamaRunning = S_FALSE;
 
 
 struct TOOL_PARAM
@@ -120,6 +123,7 @@ struct COPILOT_MODEL
 	std::string name;
 	float rate = 0.0f;
 	bool Premium = 0;
+	bool Ollama = 0;
 };
 
 struct COPILOT_PARAMETERS
@@ -284,10 +288,24 @@ public:
 		return r;
 	}
 
+	static void DetectOllamaRunning()
+	{
+		if (OllamaRunning == S_FALSE)
+		{
+			std::thread tx([&]()
+				{
+					TryOllamaRunning();
+				});
+			tx.detach();
+		}
+
+	}
+
 
 	COPILOT(COPILOT_PARAMETERS& cx)
 	{
 		cp = cx;
+		DetectOllamaRunning();
 	}
 	~COPILOT()
 	{
@@ -318,6 +336,28 @@ public:
 		return dlls.size() - 1;
 	}	
 
+	static void TryOllamaRunning()
+	{
+		if (OllamaRunning != S_FALSE)
+			return;
+		SOCKET x = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (x == INVALID_SOCKET)
+		{
+			OllamaRunning = E_FAIL;
+			return;
+		}
+		sockaddr_in sa = { 0 };
+		sa.sin_family = AF_INET;
+		sa.sin_port = htons(11434);
+		inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr);
+		int res = connect(x, (sockaddr*)&sa, sizeof(sa));
+		closesocket(x);
+		if (res == SOCKET_ERROR)
+			OllamaRunning = E_FAIL;
+		else
+			OllamaRunning = S_OK;
+	}
+
 	static std::vector<COPILOT_MODEL> ollama_list()
 	{
 		//http://localhost:11434/api/tags
@@ -339,6 +379,7 @@ public:
 			m.name = name;
 			m.rate = 0.0f;
 			m.Premium = 0;
+			m.Ollama = 1;
 			models.push_back(m);
 		}
 		return models;

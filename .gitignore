@@ -16,7 +16,7 @@
 # Mono auto generated files
 mono_crash.*
 
-inst.bat
+*.bat
 u4.hpp
 
 # Build results

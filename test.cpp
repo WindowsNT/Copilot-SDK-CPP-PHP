@@ -151,6 +151,6 @@ int main()
 
 //    TestOpenAI();
 //    TestLLama();
-//      TestCopilot();
-   TestOllama();
+      TestCopilot();
+//   TestOllama();
 }
