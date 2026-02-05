@@ -6,6 +6,7 @@ name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 
+// #define YOUR_COPILOT_FOLDER L"C:\\ProgramData\\933bd016-0397-42c9-b3e0-eaa7900ef53e"
 
 /*
 void TestOpenAI()
@@ -107,8 +108,9 @@ void TestLLama()
 void TestCopilot()
 {
 	COPILOT_PARAMETERS cp;
-	cp.folder = L"f:\\copilot";
+	cp.folder = YOUR_COPILOT_FOLDER;
     COPILOT cop(cp);
+    auto sdk_models = cop.ListModelsFromSDK();
 
     std::vector<wchar_t> dll_path(1000);
     GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
@@ -131,7 +133,7 @@ void TestOllama()
     COPILOT_PARAMETERS cp;
 //    cp.custon_provider_type = "openai";    
 //    cp.custom_provider_base_url = "http://localhost:11434/v1";
-	cp.folder = L"f:\\copilot";
+    cp.folder = YOUR_COPILOT_FOLDER;
     cp.model = "qwen3-coder:30b";
 //    cp.model = "deepseek-r1:8b";
     COPILOT cop(cp);

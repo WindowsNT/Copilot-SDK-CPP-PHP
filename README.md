@@ -138,5 +138,8 @@ cp.model = "qwen3-coder:30b";
 COPILOT cop(cp);
 ``` 
 
+# Other stuff
+copilot_model_list() is hardcoded into the code. You can get a run-time list of the models from the SDK with std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().
+
 # License
 MIT

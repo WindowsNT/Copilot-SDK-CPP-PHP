@@ -126,6 +126,20 @@ struct COPILOT_MODEL
 	bool Ollama = 0;
 };
 
+struct COPILOT_SDK_MODEL
+{
+	std::string id;
+	std::string name;
+	bool SupportsVision = false;
+	std::vector<std::string> supportedvisionmediatypes;
+	int MaxPromptTokens = 0;
+	int MaxContextWindowTokens = 0;
+	int MaxPromptImages = 0;
+	int MaxPromptImageSize = 0;
+	std::string Terms;
+	float BillingMultiplier = 0.0f;
+};
+
 struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
@@ -240,6 +254,10 @@ class COPILOT
 public:
 
 	std::any user_data;
+	COPILOT_PARAMETERS& GetParameters()
+	{
+		return cp;
+	}
 	static HANDLE Run(const wchar_t* y, bool W, DWORD flgx)
 	{
 		PROCESS_INFORMATION pInfo = { 0 };
@@ -971,6 +989,146 @@ public:
 			interactiveThread = nullptr;
 		}
 		CloseAllHandles();
+	}
+
+	std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK()
+	{
+		const char* py = R"(
+import sys
+import asyncio
+import json
+from dataclasses import asdict
+
+from copilot import CopilotClient
+client = CopilotClient()
+async def main():
+    await client.start()
+    models = await client.list_models()
+    j = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
+    print(j)
+    with open(sys.argv[1], 'w') as f:
+        print(j, file=f) 
+    
+if len(sys.argv) <= 1:
+    exit()
+asyncio.run(main())
+ 
+)";
+
+		PushPopDirX ppd(cp.folder.c_str());
+		auto tf = TempFile(L"py");
+		std::vector<char> data(1000000);
+		// Write py to file
+		HANDLE h = CreateFileW(tf.c_str(), GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
+		if (h != INVALID_HANDLE_VALUE)
+		{
+			DWORD written = 0;
+			WriteFile(h, py, (DWORD)strlen(py), &written, 0);
+			CloseHandle(h);
+		}
+		else
+		{
+			return {};
+		}
+		auto tf2 = TempFile(L"json");
+		std::wstring cmd = L"python \"";
+		cmd += tf.c_str();
+		cmd += L"\" \"";
+		cmd += tf2.c_str();
+		cmd += L"\"";
+		Run(cmd.c_str(), true, CREATE_NO_WINDOW);
+		// Read json from file
+		HANDLE h2 = CreateFileW(tf2.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+		if (h2 != INVALID_HANDLE_VALUE)
+		{
+			DWORD read = 0;
+			std::vector<char> buffer(1000000);
+			ReadFile(h2, buffer.data(), (DWORD)buffer.size() - 1, &read, 0);
+			CloseHandle(h2);
+			if (read > 0)
+			{
+				buffer[read] = 0;
+				std::string s(buffer.data(), read);
+				auto jx = nlohmann::json::parse(s);
+				std::vector<COPILOT_SDK_MODEL> models;
+				for (auto& item : jx)
+				{
+					/*
+
+					{
+						"id": "gpt-4.1",
+						"name": "GPT-4.1",
+						"capabilities": {
+						  "supports": {
+							"vision": true
+						  },
+						  "limits": {
+							"max_prompt_tokens": 64000,
+							"max_context_window_tokens": 128000,
+							"vision": {
+							  "supported_media_types": [
+								"image/jpeg",
+								"image/png",
+								"image/webp",
+								"image/gif"
+							  ],
+							  "max_prompt_images": 1,
+							  "max_prompt_image_size": 3145728
+							}
+						  }
+						},
+						"policy": {
+						  "state": "enabled",
+						  "terms": "Enable access to the latest GPT-4.1 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-4.1](https://docs.github.com/en/copilot/using-github-copilot/ai-models/choosing-the-right-ai-model-for-your-task#gpt-41)."
+						},
+						"billing": {
+						  "multiplier": 0.0
+						}
+					  }
+
+					*/
+					COPILOT_SDK_MODEL m;
+					m.id = item["id"].get<std::string>();
+					m.name = item["name"].get<std::string>();
+					if (item.contains("capabilities") && item["capabilities"].contains("limits"))
+					{
+						auto& limits = item["capabilities"]["limits"];
+						if (limits.contains("max_prompt_tokens"))
+							m.MaxPromptTokens = limits["max_prompt_tokens"].get<int>();
+						if (limits.contains("max_context_window_tokens"))
+							m.MaxContextWindowTokens = limits["max_context_window_tokens"].get<int>();
+						if (limits.contains("vision"))
+						{
+							auto& vision = limits["vision"];
+							if (vision.contains("supported_media_types"))
+							{
+								for (auto& mt : vision["supported_media_types"])
+									m.supportedvisionmediatypes.push_back(mt.get<std::string>());
+							}
+							if (vision.contains("max_prompt_images"))
+								m.MaxPromptImages = vision["max_prompt_images"].get<int>();
+							if (vision.contains("max_prompt_image_size"))
+								m.MaxPromptImageSize = vision["max_prompt_image_size"].get<int>();
+						}
+						// policy
+						if (item.contains("policy"))
+						{
+							auto& policy = item["policy"];
+							if (policy.contains("terms"))
+								m.Terms = policy["terms"].get<std::string>();
+						}
+
+						// billing multiplier
+						if (item.contains("billing") && item["billing"].contains("multiplier"))
+							m.BillingMultiplier = item["billing"]["multiplier"].get<float>();
+
+						models.push_back(m);
+					}
+				}
+				return models;
+			}
+		}
+		return { };
 	}
 
 	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
