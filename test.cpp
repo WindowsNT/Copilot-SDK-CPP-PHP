@@ -110,7 +110,7 @@ void TestCopilot()
 	COPILOT_PARAMETERS cp;
 	cp.folder = YOUR_COPILOT_FOLDER;
     COPILOT cop(cp);
-    auto sdk_models = cop.ListModelsFromSDK();
+    auto sdk_models = cop.copilot_model_list();
 
     std::vector<wchar_t> dll_path(1000);
     GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);

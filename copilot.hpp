@@ -120,7 +120,8 @@ struct COPILOT_ANSWER
 
 struct COPILOT_MODEL
 {
-	std::string name;
+	std::string id;
+	std::string fullname;
 	float rate = 0.0f;
 	bool Premium = 0;
 	bool Ollama = 0;
@@ -394,7 +395,8 @@ public:
 		{
 			std::string name = item["model"];
 			COPILOT_MODEL m;
-			m.name = name;
+			m.id = name;
+			m.fullname = name;
 			m.rate = 0.0f;
 			m.Premium = 0;
 			m.Ollama = 1;
@@ -404,8 +406,24 @@ public:
 	}
 
 
-	static std::vector<COPILOT_MODEL> copilot_model_list() {
-		return {
+	std::vector<COPILOT_MODEL> copilot_model_list() {
+
+		auto sdk_models = ListModelsFromSDK();
+		std::vector<COPILOT_MODEL> models;
+		for (const auto& sdk_model : sdk_models)
+		{
+			COPILOT_MODEL m;
+			m.fullname = sdk_model.name;
+			m.id = sdk_model.id;
+			m.rate = sdk_model.BillingMultiplier;
+			m.Premium = sdk_model.BillingMultiplier > 1.0f;
+			m.Ollama = 0;
+			models.push_back(m);
+		}
+		return models;
+
+
+/*		return {
 			{"GPT-4.1",0,0},
 			{"GPT-5-Mini",0,0},
 
@@ -423,8 +441,9 @@ public:
 			{"Claude-Opus-4.5",3.0f,1},
 
 			{ "Gemini-3-Pro-Preview",1,1 },
-
+			
 		};
+		*/
 	};
 
 	/*

@@ -139,7 +139,7 @@ COPILOT cop(cp);
 ``` 
 
 # Other stuff
-copilot_model_list() is hardcoded into the code. You can get a run-time list of the models from the SDK with std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().
+copilot_model_list() returns limited information, for full run-time description of the models from the SDK you can call std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().
 
 # License
 MIT
