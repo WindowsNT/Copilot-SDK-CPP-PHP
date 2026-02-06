@@ -139,7 +139,9 @@ COPILOT cop(cp);
 ``` 
 
 # Other stuff
-copilot_model_list() returns limited information, for full run-time description of the models from the SDK you can call std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().
-
+* copilot_model_list() returns limited information, for full run-time description of the models from the SDK you can call std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().
+* You can call Ping() to return "pong" to check if the connection with the SDK is working.
+* You can call State() to get a state string (e.g. "connected").
+* You can call AuthState() to get a "true" or "false".
 # License
 MIT

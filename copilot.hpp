@@ -106,6 +106,13 @@ struct COPILOT_QUESTION
 struct COPILOT_ANSWER
 {
 	std::vector<std::wstring> strings;
+	std::wstring Collect()
+	{
+		std::wstring r;
+		for (auto& s : strings)
+			r += s;
+		return r;
+	}
 	HANDLE hEvent = 0;
 	unsigned long long key = 0;
 	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
@@ -703,7 +710,7 @@ public:
 					auto fr = Prompts.front();
 					Prompts.pop();
 					r = fr.prompt;
-					if (r == L"exit" || r == L"quit")
+					if (r == L"/exit" || r == L"/quit")
 					{
 						SetEvent(Answers[fr.key]->hEvent);
 						ReleaseAnswer(fr.key);
@@ -969,7 +976,7 @@ public:
 						auto fr = pThis->Prompts.front();
 						pThis->Prompts.pop();
 						r = fr.prompt;
-						if (r == L"exit" || r == L"quit")
+						if (r == L"/exit" || r == L"/quit")
 							SetEvent(pThis->Answers[fr.key]->hEvent);
 						COPILOT_QUESTION rr;
 						rr.key = fr.key;
@@ -1002,7 +1009,7 @@ public:
 		if (interactiveThread)
 		{
 			if (!PushedExit)	
-				PushPrompt(L"exit", true);
+				PushPrompt(L"/exit", true);
 			interactiveThread->join();
 			interactiveThread.reset();
 			interactiveThread = nullptr;
@@ -1010,150 +1017,91 @@ public:
 		CloseAllHandles();
 	}
 
+	std::wstring Ping()
+	{
+		auto ans = PushPrompt(L"/ping", true);
+		if (!ans)
+			return L"";
+		return ans->Collect();
+	}
+	std::wstring State()
+	{
+		auto ans = PushPrompt(L"/state", true);
+		if (!ans)
+			return L"";
+		return ans->Collect();
+	}
+	std::wstring AuthState()
+	{
+		auto ans = PushPrompt(L"/authstate", true);
+		if (!ans)
+			return L"";
+		return ans->Collect();
+	}
+
 	std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK()
 	{
-		const char* py = R"(
-import sys
-import asyncio
-import json
-from dataclasses import asdict
-
-from copilot import CopilotClient
-client = CopilotClient()
-async def main():
-    await client.start()
-    models = await client.list_models()
-    j = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
-    print(j)
-    with open(sys.argv[1], 'w') as f:
-        print(j, file=f) 
-    
-if len(sys.argv) <= 1:
-    exit()
-asyncio.run(main())
- 
-)";
-
-		PushPopDirX ppd(cp.folder.c_str());
-		auto tf = TempFile(L"py");
-		std::vector<char> data(1000000);
-		// Write py to file
-		HANDLE h = CreateFileW(tf.c_str(), GENERIC_WRITE, 0, 0, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, 0);
-		if (h != INVALID_HANDLE_VALUE)
+		std::vector<COPILOT_SDK_MODEL> models;
+		auto ans = PushPrompt(L"/models", true);
+		if (!ans)
+			return models;
+		std::wstring r = ans->Collect();
+		auto s = toc(r.c_str());
+		try
 		{
-			DWORD written = 0;
-			WriteFile(h, py, (DWORD)strlen(py), &written, 0);
-			CloseHandle(h);
+			auto jx = nlohmann::json::parse(s);
+			for (auto& item : jx)
+			{
+				COPILOT_SDK_MODEL m;
+				m.id = item["id"].get<std::string>();
+				m.name = item["name"].get<std::string>();
+				if (item.contains("capabilities") && item["capabilities"].contains("limits"))
+				{
+					auto& limits = item["capabilities"]["limits"];
+					if (limits.contains("max_prompt_tokens"))
+						m.MaxPromptTokens = limits["max_prompt_tokens"].get<int>();
+					if (limits.contains("max_context_window_tokens"))
+						m.MaxContextWindowTokens = limits["max_context_window_tokens"].get<int>();
+					if (limits.contains("vision"))
+					{
+						auto& vision = limits["vision"];
+						if (vision.contains("supported_media_types"))
+						{
+							for (auto& mt : vision["supported_media_types"])
+								m.supportedvisionmediatypes.push_back(mt.get<std::string>());
+						}
+						if (vision.contains("max_prompt_images"))
+							m.MaxPromptImages = vision["max_prompt_images"].get<int>();
+						if (vision.contains("max_prompt_image_size"))
+							m.MaxPromptImageSize = vision["max_prompt_image_size"].get<int>();
+					}
+					// policy
+					if (item.contains("policy"))
+					{
+						auto& policy = item["policy"];
+						if (policy.contains("terms"))
+							m.Terms = policy["terms"].get<std::string>();
+					}
+
+					// billing multiplier
+					if (item.contains("billing") && item["billing"].contains("multiplier"))
+						m.BillingMultiplier = item["billing"]["multiplier"].get<float>();
+
+					models.push_back(m);
+				}
+			}
 		}
-		else
+		catch (...)
 		{
 			return {};
 		}
-		auto tf2 = TempFile(L"json");
-		std::wstring cmd = L"python \"";
-		cmd += tf.c_str();
-		cmd += L"\" \"";
-		cmd += tf2.c_str();
-		cmd += L"\"";
-		Run(cmd.c_str(), true, CREATE_NO_WINDOW);
-		// Read json from file
-		HANDLE h2 = CreateFileW(tf2.c_str(), GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
-		if (h2 != INVALID_HANDLE_VALUE)
-		{
-			DWORD read = 0;
-			std::vector<char> buffer(1000000);
-			ReadFile(h2, buffer.data(), (DWORD)buffer.size() - 1, &read, 0);
-			CloseHandle(h2);
-			if (read > 0)
-			{
-				buffer[read] = 0;
-				std::string s(buffer.data(), read);
-				auto jx = nlohmann::json::parse(s);
-				std::vector<COPILOT_SDK_MODEL> models;
-				for (auto& item : jx)
-				{
-					/*
-
-					{
-						"id": "gpt-4.1",
-						"name": "GPT-4.1",
-						"capabilities": {
-						  "supports": {
-							"vision": true
-						  },
-						  "limits": {
-							"max_prompt_tokens": 64000,
-							"max_context_window_tokens": 128000,
-							"vision": {
-							  "supported_media_types": [
-								"image/jpeg",
-								"image/png",
-								"image/webp",
-								"image/gif"
-							  ],
-							  "max_prompt_images": 1,
-							  "max_prompt_image_size": 3145728
-							}
-						  }
-						},
-						"policy": {
-						  "state": "enabled",
-						  "terms": "Enable access to the latest GPT-4.1 model from OpenAI. [Learn more about how GitHub Copilot serves GPT-4.1](https://docs.github.com/en/copilot/using-github-copilot/ai-models/choosing-the-right-ai-model-for-your-task#gpt-41)."
-						},
-						"billing": {
-						  "multiplier": 0.0
-						}
-					  }
-
-					*/
-					COPILOT_SDK_MODEL m;
-					m.id = item["id"].get<std::string>();
-					m.name = item["name"].get<std::string>();
-					if (item.contains("capabilities") && item["capabilities"].contains("limits"))
-					{
-						auto& limits = item["capabilities"]["limits"];
-						if (limits.contains("max_prompt_tokens"))
-							m.MaxPromptTokens = limits["max_prompt_tokens"].get<int>();
-						if (limits.contains("max_context_window_tokens"))
-							m.MaxContextWindowTokens = limits["max_context_window_tokens"].get<int>();
-						if (limits.contains("vision"))
-						{
-							auto& vision = limits["vision"];
-							if (vision.contains("supported_media_types"))
-							{
-								for (auto& mt : vision["supported_media_types"])
-									m.supportedvisionmediatypes.push_back(mt.get<std::string>());
-							}
-							if (vision.contains("max_prompt_images"))
-								m.MaxPromptImages = vision["max_prompt_images"].get<int>();
-							if (vision.contains("max_prompt_image_size"))
-								m.MaxPromptImageSize = vision["max_prompt_image_size"].get<int>();
-						}
-						// policy
-						if (item.contains("policy"))
-						{
-							auto& policy = item["policy"];
-							if (policy.contains("terms"))
-								m.Terms = policy["terms"].get<std::string>();
-						}
-
-						// billing multiplier
-						if (item.contains("billing") && item["billing"].contains("multiplier"))
-							m.BillingMultiplier = item["billing"]["multiplier"].get<float>();
-
-						models.push_back(m);
-					}
-				}
-				return models;
-			}
-		}
-		return { };
+		return models;
 	}
 
 	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
 	{	
 		const char* py = R"(
-# import pdb
+import pdb
 import asyncio
 import random
 import sys
@@ -1163,6 +1111,7 @@ import time
 import ctypes
 import win32event
 import json
+from dataclasses import asdict
 from multiprocessing.shared_memory import SharedMemory
 from copilot import CopilotClient
 from copilot.tools import define_tool
@@ -1255,13 +1204,48 @@ async def main():
             continue  # corrupted / empty
         payload = bytes(buf[4:4+size])
         user_input = payload.decode("utf-8").rstrip("\r\n")
+        if user_input == "/exit":
+            print("\033[91m",user_input,"\033[0m")
+            print("Exiting interactive session.")
+            break
+        if user_input == "/quit":
+            print("\033[91m",user_input,"\033[0m")
+            print("Exiting interactive session.")
+            break
+        if user_input == "/ping":
+            print("\033[91m",user_input,"\033[0m")
+            pong = await client.ping("")
+            ring_write(bytes(pong.message, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write(end_payload)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/authstate":
+            print("\033[91m",user_input,"\033[0m")
+            pong = await client.get_auth_status()
+            ring_write(bytes(json.dumps(pong.isAuthenticated), 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write(end_payload)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/state":
+            print("\033[91m",user_input,"\033[0m")
+            pong = client.get_state()
+            ring_write(bytes(pong, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write(end_payload)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/models":
+            print("\033[91m",user_input,"\033[0m")
+            models = await client.list_models()
+            payload = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
+            ring_write(bytes(payload, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write(end_payload)
+            win32event.SetEvent(ev_out)
+            continue
         print("\033[92m",user_input,"\033[0m")
-        if user_input == "exit":
-            print("Exiting interactive session.")
-            break
-        if user_input == "quit":
-            print("Exiting interactive session.")
-            break
         await session.send_and_wait({"prompt": user_input})
         # also send --end--
         end_payload = "--end--".encode("utf-8")
@@ -1513,7 +1497,7 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 				SetEvent(hEI);
 			}
 
-			if (prompt == "exit" || prompt == "quit")
+			if (prompt == "/exit" || prompt == "/quit")
 				break;
 
 			if (1)

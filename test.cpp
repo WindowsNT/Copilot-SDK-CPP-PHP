@@ -6,7 +6,8 @@ name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
 processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 
-// #define YOUR_COPILOT_FOLDER L"C:\\ProgramData\\933bd016-0397-42c9-b3e0-eaa7900ef53e"
+// Change this 
+#define YOUR_COPILOT_FOLDER COPILOT::GetDefaultCopilotfolder()
 
 /*
 void TestOpenAI()
@@ -49,9 +50,7 @@ void AskQuestion(COPILOT& cop,bool Tool)
                 std::wcout << cop->tou(tok.c_str());
                 return S_OK;
             }, (LPARAM)&cop);
-        std::wstring s;
-        for (auto& str : ans->strings)
-            s += str;
+        std::wstring s = ans->Collect();
         MessageBox(0, s.c_str(), 0, 0);
     }
     if (1)
@@ -66,10 +65,7 @@ void AskQuestion(COPILOT& cop,bool Tool)
                     cop->CancelCurrent();
                 return S_OK;
             }, (LPARAM)&cop);
-        std::wstring s;
-        s.clear();
-        for (auto& str : ans->strings)
-            s += str;
+		std::wstring s = ans->Collect();
         MessageBox(0, s.c_str(), 0, 0);
     }
 }
@@ -110,7 +106,6 @@ void TestCopilot()
 	COPILOT_PARAMETERS cp;
 	cp.folder = YOUR_COPILOT_FOLDER;
     COPILOT cop(cp);
-    auto sdk_models = cop.copilot_model_list();
 
     std::vector<wchar_t> dll_path(1000);
     GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
@@ -122,7 +117,11 @@ void TestCopilot()
         });
 
     cop.BeginInteractive();
-	AskQuestion(cop,true);
+    [[maybe_unused]] auto sdk_models = cop.copilot_model_list();
+    auto reply = cop.Ping();
+    reply = cop.State();
+    reply = cop.AuthState();
+    AskQuestion(cop,true);
     cop.EndInteractive();
 }
 
