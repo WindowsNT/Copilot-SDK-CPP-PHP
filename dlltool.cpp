@@ -24,14 +24,13 @@ extern "C" {
 	__declspec(dllexport)
 		const char* ask_user(const char* question)
 	{
-		MessageBox(0, L"yo", 0, 0);
 		json req = json::parse(question);
 		// "question" -> the question
 		// "choices" -> array of choices (if any)
 		// "allowFreeForm" -> if true, the user can type a free form answer instead of choosing from choices
 
 		json resp;
-		resp["answer"] = "My name is Michael";
+		resp["answer"] = "I don't have the answer to that right now";
 		resp["wasFreeform"] = true;
 
 		std::string out = resp.dump();
