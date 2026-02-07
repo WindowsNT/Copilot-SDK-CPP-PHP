@@ -23,6 +23,7 @@ struct COPILOT_PARAMETERS
 	int LLama_Port = 0;
 	std::wstring api_key;
 	std::string reasoning_effort = "";
+	std::string system_message = "";
 	std::string custon_provider_type; // example  openai for ollama
 	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
 #ifdef _DEBUG
@@ -48,6 +49,7 @@ Where
 #include <iostream>
 COPILOT_PARAMETERS cp;
 cp.folder = L"f:\\copilot";
+cp.system_message = "You are a helpful assistant that can answer questions and execute tools.";
 COPILOT cop(cp);
 cop.BeginInteractive();
 auto ans = cop.PushPrompt(L"Tell me a joke",true, [](std::string tok, LPARAM lp)->HRESULT
@@ -117,6 +119,13 @@ auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026",tr
 This adds a tool to Copilot that calls the pcall function in the dlltool.dll. The pcall function receives a json string with the tool parameters and must return a json string with the tool results.
 Currently, it returns hardcoded "temperature": "14C", but you can modify it to call a weather API.
 
+# Image Attachments
+```cpp
+ cop.PushAttachmentForNextPrompt("c://image.jpg");
+```
+
+This pushes an image attachment for the next prompt. You can push multiple attachments before a prompt.
+The model must support attachments for this to work.
 
 # Connect to LLama
 ```cpp

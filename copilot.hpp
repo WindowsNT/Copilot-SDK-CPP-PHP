@@ -94,14 +94,21 @@ public:
 	}
 };
 
+struct COPILOT_ATTACHMENT
+{
+	std::wstring path;
+	std::string type = "file";
+};
 
 struct COPILOT_QUESTION
 {
 	std::wstring prompt;
+	std::vector<COPILOT_ATTACHMENT> attachments;
 	unsigned long long key = 0;
 	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
 	LPARAM lpx = 0;
 };
+
 
 struct COPILOT_ANSWER
 {
@@ -156,6 +163,7 @@ struct COPILOT_PARAMETERS
 	int LLama_Port = 0;
 	std::wstring api_key;
 	std::string reasoning_effort = "";
+	std::string system_message = "";
 	std::string custon_provider_type; // example  openai for ollama
 	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
 #ifdef _DEBUG
@@ -205,6 +213,7 @@ class COPILOT
 	float repeat_penalty = 1.1f;
 
 	std::map<unsigned long long, std::shared_ptr<COPILOT_ANSWER>> Answers;
+	std::vector<COPILOT_ATTACHMENT>  NextAttachments;
 
 
 	void ReleaseAnswer(unsigned long long key)
@@ -610,6 +619,16 @@ public:
 	}
 
 
+	
+
+	void PushAttachmentForNextPrompt(const std::wstring& path)
+	{
+		COPILOT_ATTACHMENT a;
+		a.path = path;
+		NextAttachments.push_back(a);
+	}
+
+
 	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W, HRESULT(__stdcall* cb1)(std::string token, LPARAM lp) = 0,LPARAM lpx = 0)
 	{
 		auto answer = std::make_shared<COPILOT_ANSWER>();
@@ -624,6 +643,8 @@ public:
 			Answers[answer->key] = answer;
 			COPILOT_QUESTION q;
 			q.key = answer->key;
+			q.attachments = NextAttachments;
+			NextAttachments.clear();
 			q.prompt = prompt;
 			q.cb1 = cb1;
 			q.lpx = lpx;
@@ -981,6 +1002,7 @@ public:
 						COPILOT_QUESTION rr;
 						rr.key = fr.key;
 						rr.prompt = r;
+						rr.attachments = fr.attachments;
 						rr.cb1 = fr.cb1;
 						rr.lpx = fr.lpx;
 						return rr;
@@ -1159,7 +1181,7 @@ asyncio.run(main())
 
 	std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK()
 	{
-		if (State() != L"connected")
+		if (interactiveThread == nullptr)
 			return ListModelsBeforeConnection();
 		std::vector<COPILOT_SDK_MODEL> models;
 		auto ans = PushPrompt(L"/models", true);
@@ -1191,6 +1213,16 @@ from copilot.generated.session_events import SessionEventType
 from pydantic import BaseModel, Field
 
 %s
+
+def is_json_direct(myjson,key):
+    try:
+        buf2 = json.loads(myjson)
+        buf = buf2[key]
+    except ValueError as e:
+        return False
+    except KeyError as e:
+        return False
+    return True
 
 async def main():
     %s
@@ -1318,7 +1350,13 @@ async def main():
             win32event.SetEvent(ev_out)
             continue
         print("\033[92m",user_input,"\033[0m")
-        await session.send_and_wait({"prompt": user_input})
+        # check if user passed a direct message
+        isjd = is_json_direct(user_input,"direct")
+        if isjd:
+			# parse direct message
+             await session.send_and_wait(json.loads(user_input))
+        else:
+            await session.send_and_wait({"prompt": user_input})
         # also send --end--
         end_payload = "--end--".encode("utf-8")
         print("");
@@ -1338,6 +1376,9 @@ asyncio.run(main())
 
 		PushPopDirX ppd(cp.folder.c_str());
 		auto tf = TempFile(L"py");
+#ifdef _DEBUG
+		tf = L"r:\\1.py";
+#endif
 		std::vector<char> data(1000000);
 
 		CLSID clsid = {};
@@ -1439,6 +1480,12 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		{
 			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
         "reasoning_effort": "%s",)", cp.reasoning_effort.c_str());
+		}
+
+		if (cp.system_message.length())
+		{
+			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+        "system_message": {"content": "%s"},)", cp.system_message.c_str());
 		}
 
 		// Tools
@@ -1554,6 +1601,23 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 				break;
 			auto q = pro(lp);
 			std::string prompt = toc(q.prompt.c_str());
+			if (q.attachments.size())
+			{
+				// We must pass a direct json with 
+				nlohmann::json j;
+				j["direct"] = true;
+				j["prompt"] = prompt;
+				nlohmann::json attachments = nlohmann::json::array();
+				for (auto& a : q.attachments)
+				{
+					nlohmann::json ja;
+					ja["path"] = toc(a.path.c_str());
+					ja["type"] = a.type;
+					attachments.push_back(ja);
+				}
+				j["attachments"] = attachments;
+				prompt = j.dump();
+			}
 
 			// Write it to shared memory
 			if (1)

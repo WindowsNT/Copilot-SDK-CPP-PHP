@@ -7,7 +7,10 @@ processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
 
 
 // Change this 
-//#define YOUR_COPILOT_FOLDER COPILOT::GetDefaultCopilotfolder()
+#define YOUR_COPILOT_FOLDER COPILOT::GetDefaultCopilotfolder()
+
+std::vector<wchar_t> dll_path(1000);
+std::vector<wchar_t> image_path(1000);
 
 /*
 void TestOpenAI()
@@ -40,7 +43,7 @@ void TestOpenAI()
 }
 */
 
-void AskQuestion(COPILOT& cop,bool Tool)
+void AskQuestion(COPILOT& cop,bool Tool = false,bool Image = false)
 {
     if (Tool)
     {
@@ -53,9 +56,22 @@ void AskQuestion(COPILOT& cop,bool Tool)
         std::wstring s = ans->Collect();
         MessageBox(0, s.c_str(), 0, 0);
     }
+	if (Image)
+    {
+        auto sl1 = cop.ChangeSlash(image_path.data());
+        cop.PushAttachmentForNextPrompt(sl1.c_str());
+        auto ans = cop.PushPrompt(L"Can you tell me what this image contains?", true, [](std::string tok, LPARAM lp)->HRESULT
+            {
+                COPILOT* cop = (COPILOT*)lp;
+                std::wcout << cop->tou(tok.c_str());
+                return S_OK;
+            }, (LPARAM)&cop);
+        std::wstring s = ans->Collect();
+        MessageBox(0, s.c_str(), 0, 0);
+    }
     if (1)
     {
-		static int cnt = 0;
+        static int cnt = 0;
         auto ans = cop.PushPrompt(L"Tell me about WW1", true, [](std::string tok, LPARAM lp)->HRESULT
             {
                 COPILOT* cop = (COPILOT*)lp;
@@ -65,7 +81,7 @@ void AskQuestion(COPILOT& cop,bool Tool)
                     cop->CancelCurrent();
                 return S_OK;
             }, (LPARAM)&cop);
-		std::wstring s = ans->Collect();
+        std::wstring s = ans->Collect();
         MessageBox(0, s.c_str(), 0, 0);
     }
 }
@@ -105,10 +121,9 @@ void TestCopilot()
 {
 	COPILOT_PARAMETERS cp;
 	cp.folder = YOUR_COPILOT_FOLDER;
+	cp.system_message = "You are a helpful assistant that can answer questions and execute tools.";
     COPILOT cop(cp);
 
-    std::vector<wchar_t> dll_path(1000);
-    GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
     auto sl1 = cop.ChangeSlash(dll_path.data());
     auto dll_idx = cop.AddDll(sl1.c_str(), "pcall", "pdelete");
     cop.AddTool(dll_idx, "GetWeather", "Get the current weather for a city in a specific date", {
@@ -121,7 +136,7 @@ void TestCopilot()
     auto reply = cop.Ping();
     reply = cop.State();
     reply = cop.AuthState();
-    AskQuestion(cop,true);
+    AskQuestion(cop,true,true);
     cop.EndInteractive();
 }
 
@@ -137,7 +152,7 @@ void TestOllama()
 //    cp.model = "deepseek-r1:8b";
     COPILOT cop(cp);
     cop.BeginInteractive();
-    AskQuestion(cop,false);
+    AskQuestion(cop);
     cop.EndInteractive();
 }
 
@@ -150,7 +165,10 @@ int main()
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hOut, dwMode);
 
-//    TestOpenAI();
+    GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
+    GetFullPathName(L".\\365.jpg", 1000, image_path.data(), 0);
+
+    //    TestOpenAI();
 //    TestLLama();
       TestCopilot();
 //   TestOllama();
