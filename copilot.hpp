@@ -362,14 +362,13 @@ public:
 	}
 
 
-	size_t AddDll(const std::wstring& dllpath, const std::string& callfunc, const std::string& deletefunc,const char* ask_user = nullptr)
+	size_t AddDll(const std::wstring& dllpath, const std::string& callfunc, const std::string& deletefunc,const std::string& ask_user)
 	{
 		DLL_LIST d;
 		d.dllpath = dllpath;
 		d.callfunc = callfunc;
 		d.deletefunc = deletefunc;
-		if (ask_user)
-			d.ask_user_func = ask_user;
+		d.ask_user_func = ask_user;
 		dlls.push_back(d);
 		return dlls.size() - 1;
 	}	
@@ -1380,7 +1379,7 @@ asyncio.run(main())
 		PushPopDirX ppd(cp.folder.c_str());
 		auto tf = TempFile(L"py");
 #ifdef _DEBUG
-		tf = L"r:\\1.py";
+//		tf = L"r:\\1.py";
 #endif
 		std::vector<char> data(1000000);
 
@@ -1425,7 +1424,7 @@ def au_cpp%zi(obj):
 		iDLL + 1, d.callfunc.c_str(),iDLL + 1, d.callfunc.c_str(),iDLL + 1, iDLL + 1, iDLL + 1,d.deletefunc.c_str(),
 
 			iDLL + 1,iDLL + 1, d.callfunc.c_str(),iDLL + 1,d.deletefunc.c_str(),
-				iDLL + 1, iDLL + 1, d.ask_user_func.length() ? d.ask_user_func.c_str() : "do_not_ask_user", iDLL + 1, d.deletefunc.c_str()
+				iDLL + 1, iDLL + 1, d.ask_user_func.c_str(), iDLL + 1, d.deletefunc.c_str()
 				);
 			dll_entries += d1.data();
 			dll_entries += "\r\n";
