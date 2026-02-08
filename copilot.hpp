@@ -1317,6 +1317,9 @@ async def main():
                 asyncio.get_running_loop().create_task(session.abort())
             win32event.SetEvent(ev_out)
         if event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
+            if (start_reasoning == 1):
+                print("\033[0m")
+                start_reasoning = 0
             payload = event.data.delta_content.encode("utf-8")
             # print it
             print(event.data.delta_content, end='', flush=True)
