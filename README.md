@@ -1,6 +1,7 @@
 # Copilot/LLama/Ollama SDK for C++
 
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
+I'm already using it in [Turbo Play](https://www.turbo-play.com).
 
 # Copilot Installation
 * Create a folder with python installed 
@@ -24,8 +25,8 @@ struct COPILOT_PARAMETERS
 	std::wstring api_key;
 	std::string reasoning_effort = "";
 	std::string system_message = "";
-	std::string custon_provider_type; // example  openai for ollama
-	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
+	std::string custon_provider_type; 
+	std::string custom_provider_base_url; //  
 #ifdef _DEBUG
 	bool Debug = 1;
 #else
@@ -92,6 +93,25 @@ extern "C" {
 		memcpy(mem, out.c_str(), out.size() + 1);
 		return mem;
 	}
+	
+	__declspec(dllexport)
+		const char* ask_user(const char* question)
+	{
+		json req = json::parse(question);
+		// "question" -> the question
+		// "choices" -> array of choices (if any)
+		// "allowFreeForm" -> if true, the user can type a free form answer instead of choosing from choices
+
+		json resp;
+		resp["answer"] = "I don't have the answer to that right now";
+		resp["wasFreeform"] = true;
+
+		std::string out = resp.dump();
+		char* mem = (char*)std::malloc(out.size() + 1);
+		memcpy(mem, out.c_str(), out.size() + 1);
+		return mem;
+	}
+
 
 	// free memory returned by pcall
 	__declspec(dllexport)
@@ -107,7 +127,7 @@ extern "C" {
 std::vector<wchar_t> dll_path(1000);
 GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
 auto sl1 = cop.ChangeSlash(dll_path.data());
-auto dll_idx = cop.AddDll(sl1.c_str(),"pcall","pdelete");
+auto dll_idx = cop.AddDll(sl1.c_str(),"pcall","pdelete","ask_user");
 cop.AddTool(dll_idx, "GetWeather", "Get the current weather for a city in a specific date",{
         {"city", "str", "Name of the city to get the weather for"},
         {"date", "int", "Date to get the weather for"}
