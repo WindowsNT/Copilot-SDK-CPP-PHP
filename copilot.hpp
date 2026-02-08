@@ -106,7 +106,7 @@ struct COPILOT_QUESTION
 	std::wstring prompt;
 	std::vector<COPILOT_ATTACHMENT> attachments;
 	unsigned long long key = 0;
-	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
+	HRESULT(__stdcall* cb1)(int Status,std::string token, LPARAM lp);
 	LPARAM lpx = 0;
 };
 
@@ -114,6 +114,7 @@ struct COPILOT_QUESTION
 struct COPILOT_ANSWER
 {
 	std::vector<std::wstring> strings;
+	std::vector<std::wstring> reasoning;
 	std::wstring Collect()
 	{
 		std::wstring r;
@@ -121,9 +122,16 @@ struct COPILOT_ANSWER
 			r += s;
 		return r;
 	}
+	std::wstring CollectReasoning()
+	{
+		std::wstring r;
+		for (auto& s : reasoning)
+			r += s;
+		return r;
+	}
 	HANDLE hEvent = 0;
 	unsigned long long key = 0;
-	HRESULT(__stdcall* cb1)(std::string token, LPARAM lp);
+	HRESULT(__stdcall* cb1)(int Status,std::string token, LPARAM lp);
 	LPARAM lpx = 0;
 	~COPILOT_ANSWER()
 	{
@@ -631,7 +639,7 @@ public:
 	}
 
 
-	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W, HRESULT(__stdcall* cb1)(std::string token, LPARAM lp) = 0,LPARAM lpx = 0)
+	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W, HRESULT(__stdcall* cb1)(int Status,std::string token, LPARAM lp) = 0,LPARAM lpx = 0)
 	{
 		auto answer = std::make_shared<COPILOT_ANSWER>();
 		if (1)
@@ -901,7 +909,7 @@ public:
 														// Call callback
 														if (pThis->fr->cb1)
 														{
-															auto ef = pThis->fr->cb1(content, pThis->fr->lpx);
+															auto ef = pThis->fr->cb1(1,content, pThis->fr->lpx);
 															if (FAILED(ef))
 															{
 																SetEvent(ans->hEvent);
@@ -1010,7 +1018,7 @@ public:
 						return rr;
 					}
 
-					}, [](std::wstring response, unsigned long long key,LPARAM lp, bool End) 
+					}, [](int Status,std::wstring response, unsigned long long key,LPARAM lp, bool End) 
 						{
 							COPILOT* pThis = (COPILOT*)lp;
 							std::lock_guard<std::recursive_mutex> lock(pThis->promptMutex);
@@ -1020,9 +1028,12 @@ public:
 								pThis->ReleaseAnswer(key);
 								return;
 							}
-							pThis->Answers[key]->strings.push_back(response);
+							if (Status == 3)
+								pThis->Answers[key]->reasoning.push_back(response);
+							else
+								pThis->Answers[key]->strings.push_back(response);
 							if (pThis->Answers[key]->cb1)
-								pThis->Answers[key]->cb1(pThis->toc(response.c_str()), pThis->Answers[key]->lpx);
+								pThis->Answers[key]->cb1(Status,pThis->toc(response.c_str()), pThis->Answers[key]->lpx);
 
 						}, (LPARAM)this);
 			});
@@ -1194,7 +1205,7 @@ asyncio.run(main())
 		return ModelsFromJ(s);
 	}
 
-	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
+	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(int Status,std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
 	{	
 		const char* py = R"(
 import pdb
@@ -1244,7 +1255,7 @@ async def main():
     session = await client.create_session(session_config)
     print("Model: ", session_config['model'])
 
-    def ring_write(payload: bytes):
+    def ring_write_final(payload: bytes):
         buf = shm_out.buf
         w = struct.unpack_from("<I", buf, 0)[0]
         r = struct.unpack_from("<I", buf, 4)[0]
@@ -1278,8 +1289,33 @@ async def main():
         struct.pack_into("<I", buf, 0, (w + msg_len) %% capacity)
         return True
 
+    def ring_write_status(payload: bytes, status: int):
+        # first byte of payload is status
+        payload = bytes([status]) + payload
+        return ring_write_final(payload)
 
+    def ring_write(payload: bytes):
+        return ring_write_status(payload,1)
+
+    start_reasoning = 0
     def handle_event(event):
+        nonlocal start_reasoning
+        if event.type == SessionEventType.ASSISTANT_REASONING:
+            if (start_reasoning == 1):
+                print("\033[0m")
+                start_reasoning = 0
+        if event.type == SessionEventType.ASSISTANT_REASONING_DELTA:
+            payload = event.data.delta_content.encode("utf-8")
+            if (start_reasoning == 0):
+                print("\033[35m",end='')
+                start_reasoning = 1
+            print(event.data.delta_content,end='')
+            ring_write_status(payload,3)
+            # if ev_cancel is set, stop
+            wait = win32event.WaitForSingleObject(ev_cancel, 0)
+            if wait == win32event.WAIT_OBJECT_0:
+                asyncio.get_running_loop().create_task(session.abort())
+            win32event.SetEvent(ev_out)
         if event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
             payload = event.data.delta_content.encode("utf-8")
             # print it
@@ -1289,7 +1325,6 @@ async def main():
             wait = win32event.WaitForSingleObject(ev_cancel, 0)
             if wait == win32event.WAIT_OBJECT_0:
                 asyncio.get_running_loop().create_task(session.abort())
-
             # set event
             win32event.SetEvent(ev_out)
 
@@ -1311,47 +1346,48 @@ async def main():
         payload = bytes(buf[4:4+size])
         user_input = payload.decode("utf-8").rstrip("\r\n")
         if user_input == "/exit":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             print("Exiting interactive session.")
             break
         if user_input == "/quit":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             print("Exiting interactive session.")
             break
         if user_input == "/ping":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             pong = await client.ping("")
             ring_write(bytes(pong.message, 'utf-8'))
             end_payload = "--end--".encode("utf-8")
-            ring_write(end_payload)
+            ring_write_status(end_payload,2)
             win32event.SetEvent(ev_out)
             continue
         if user_input == "/authstate":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             pong = await client.get_auth_status()
             ring_write(bytes(json.dumps(pong.isAuthenticated), 'utf-8'))
             end_payload = "--end--".encode("utf-8")
-            ring_write(end_payload)
+            ring_write_status(end_payload,2)
             win32event.SetEvent(ev_out)
             continue
         if user_input == "/state":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             pong = client.get_state()
             ring_write(bytes(pong, 'utf-8'))
             end_payload = "--end--".encode("utf-8")
-            ring_write(end_payload)
+            ring_write_status(end_payload,2)
             win32event.SetEvent(ev_out)
             continue
         if user_input == "/models":
-            print("\033[91m",user_input,"\033[0m")
+            print("\033[91m",user_input,"\033[0m",sep='')
             models = await client.list_models()
             payload = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
             ring_write(bytes(payload, 'utf-8'))
             end_payload = "--end--".encode("utf-8")
-            ring_write(end_payload)
+            ring_write_status(end_payload,2)
             win32event.SetEvent(ev_out)
             continue
-        print("\033[92m",user_input,"\033[0m")
+        print("\033[92m",user_input,"\033[0m",end='',sep='')
+        print('')
         # check if user passed a direct message
         isjd = is_json_direct(user_input,"direct")
         if isjd:
@@ -1362,7 +1398,7 @@ async def main():
         # also send --end--
         end_payload = "--end--".encode("utf-8")
         print("");
-        ring_write(end_payload)
+        ring_write_status(end_payload,2)
         win32event.SetEvent(ev_out)
 
     shm_in.close()
@@ -1713,18 +1749,26 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 
 							*read_idx = (*read_idx + size) % capacity;
 
-							std::string msg(buf.begin(), buf.end());
+							unsigned char StatusByte = buf[0];
+							std::string msg(buf.data() + 1, buf.size() - 1);
+
+							if (StatusByte == 3)
+							{
+								// reasoning
+								cb(3, tou(msg.c_str()), q.key, lp, false);
+								continue;
+							}
 
 							// ---- termination check ----
 							if (msg == "--end--")
 							{
 								// Call callback
-								cb(tou(msg.c_str()), q.key, lp, true);
+								cb(2,tou(msg.c_str()), q.key, lp, true);
 								Ended = true;
 								break;
 							}
 							// Call callback
-							cb(tou(msg.c_str()), q.key, lp, false);
+							cb(1,tou(msg.c_str()), q.key, lp, false);
 						}
 					}
 				}

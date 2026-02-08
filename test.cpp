@@ -47,8 +47,10 @@ void AskQuestion(COPILOT& cop,bool Tool = false,bool Image = false,bool AskUser 
 {
     if (AskUser)
     {
-        auto ans = cop.PushPrompt(L"What is my name?", true, [](std::string tok, LPARAM lp)->HRESULT
+        auto ans = cop.PushPrompt(L"What is my name?", true, [](int Status,std::string tok, LPARAM lp)->HRESULT
             {
+                if (Status == 3) // reasoning
+                    return S_OK;
                 COPILOT* cop = (COPILOT*)lp;
                 std::wcout << cop->tou(tok.c_str());
                 return S_OK;
@@ -59,8 +61,10 @@ void AskQuestion(COPILOT& cop,bool Tool = false,bool Image = false,bool AskUser 
     }
     if (Tool)
     {
-        auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026", true, [](std::string tok, LPARAM lp)->HRESULT
+        auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026", true, [](int Status,std::string tok, LPARAM lp)->HRESULT
             {
+                if (Status == 3) // reasoning
+                    return S_OK;
                 COPILOT* cop = (COPILOT*)lp;
                 std::wcout << cop->tou(tok.c_str());
                 return S_OK;
@@ -72,8 +76,10 @@ void AskQuestion(COPILOT& cop,bool Tool = false,bool Image = false,bool AskUser 
     {
         auto sl1 = cop.ChangeSlash(image_path.data());
         cop.PushAttachmentForNextPrompt(sl1.c_str());
-        auto ans = cop.PushPrompt(L"Can you tell me what this image contains?", true, [](std::string tok, LPARAM lp)->HRESULT
+        auto ans = cop.PushPrompt(L"Can you tell me what this image contains?", true, [](int Status,std::string tok, LPARAM lp)->HRESULT
             {
+                if (Status == 3) // reasoning
+                    return S_OK;
                 COPILOT* cop = (COPILOT*)lp;
                 std::wcout << cop->tou(tok.c_str());
                 return S_OK;
@@ -84,8 +90,10 @@ void AskQuestion(COPILOT& cop,bool Tool = false,bool Image = false,bool AskUser 
     if (1)
     {
         static int cnt = 0;
-        auto ans = cop.PushPrompt(L"Tell me about WW1", true, [](std::string tok, LPARAM lp)->HRESULT
+        auto ans = cop.PushPrompt(L"Tell me about WW1", true, [](int Status,std::string tok, LPARAM lp)->HRESULT
             {
+                if (Status == 3) // reasoning
+                    return S_OK;
                 COPILOT* cop = (COPILOT*)lp;
                 std::wcout << cop->tou(tok.c_str());
                 cnt++;
@@ -117,9 +125,11 @@ void TestLLama()
         printf("\033[0m");
         if (prompt == L"exit" || prompt == L"quit")
             break;
-        auto ans = cop.PushPrompt(prompt, true, [](std::string tok, LPARAM lp)->HRESULT
+        auto ans = cop.PushPrompt(prompt, true, [](int Status,std::string tok, LPARAM lp)->HRESULT
             {
-				COPILOT* cop = (COPILOT*)lp;
+                if (Status == 3) // reasoning
+                    return S_OK;
+                COPILOT* cop = (COPILOT*)lp;
 				std::wcout << cop->tou(tok.c_str());
                 return S_OK;
             },(LPARAM)&cop);
@@ -133,6 +143,9 @@ void TestCopilot()
 {
 	COPILOT_PARAMETERS cp;
 	cp.folder = YOUR_COPILOT_FOLDER;
+    cp.model = "gpt-5-mini";
+//    cp.model = "gpt-4.1";
+
 	cp.system_message = "You are a helpful assistant that can answer questions and execute tools.";
     COPILOT cop(cp);
 

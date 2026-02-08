@@ -52,19 +52,20 @@ cp.folder = L"f:\\copilot";
 cp.system_message = "You are a helpful assistant that can answer questions and execute tools.";
 COPILOT cop(cp);
 cop.BeginInteractive();
-auto ans = cop.PushPrompt(L"Tell me a joke",true, [](std::string tok, LPARAM lp)->HRESULT
+auto ans = cop.PushPrompt(int Status,L"Tell me a joke",true, [](std::string tok, LPARAM lp)->HRESULT
         {
+		    if (Status == 3)
+			    return S_OK; 
             COPILOT* cop = (COPILOT*)lp;
             std::wcout << cop->tou(tok.c_str());
             return S_OK;
         }, (LPARAM)&cop);
-std::wstring s;
-for (auto& str : ans->strings)
-    s += str;
+std::wstring s = ans->Collect();
 MessageBox(0, s.c_str(), 0, 0);
 cop.EndInteractive();
 ```
 
+* PushPormpt's Status is 1 for the answer tokens and 3 for reasoning tokens (if any).
 * PushPrompt's true/false parameter is whether to wait for the response. If false, then the "ans" structure includes a HANDLE event to be triggered when the response is ready.
 * You can provide a callback function to receive tokens as they arrive.
 
@@ -140,8 +141,9 @@ COPILOT cop(cp);
 # Connect to Ollama
 ```cpp
 COPILOT_PARAMETERS cp;
-cp.custon_provider_type = "openai";    
-cp.custom_provider_base_url = "http://localhost:11434/v1";
+// You do not need the following if ollama is running to the default 11434 port
+// cp.custon_provider_type = "openai";    
+// cp.custom_provider_base_url = "http://localhost:11434/v1";
 cp.folder = L"f:\\copilot";
 cp.model = "qwen3-coder:30b";
 COPILOT cop(cp);
