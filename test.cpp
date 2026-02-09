@@ -161,7 +161,12 @@ void TestCopilot()
     auto reply = cop.Ping();
     reply = cop.State();
     reply = cop.AuthState();
-    AskQuestion(cop,true,true,false);
+    if (reply == L"false")
+    {
+		MessageBox(0, L"You are not authenticated, please run copilot.exe and /login.", 0, 0);
+    }
+    else
+        AskQuestion(cop,true,true,false);
     cop.EndInteractive();
 }
 
