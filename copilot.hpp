@@ -371,6 +371,98 @@ public:
 		EndInteractive();
 	}
 
+#pragma comment(lib,"Comctl32.lib")
+	static void ShowStatus(const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
+	{
+		auto st = Status(folder, Refresh);
+
+		auto getst = [&]() -> std::wstring
+			{
+				std::wstring s;
+
+				if (st.Installed)
+					s += std::wstring(L"Installed: ") + std::wstring(L"Yes\r\n");
+				else
+					s += std::wstring(L"Installed: ") + std::wstring(L"No\r\n");
+				if (st.Connected)
+					s += std::wstring(L"Status: ") + std::wstring(L"Connected\r\n");
+				else
+					s += std::wstring(L"Status: ") + std::wstring(L"Disconnected\r\n");
+				if (st.Authenticated)
+					s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated\r\n");
+				else
+					s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated\r\n");
+				s += L"\r\n\r\n";
+				s += L"Models\r\n----------------------------------------------------\r\n";
+				for (auto& l : st.models)
+				{
+					wchar_t buf[200] = {};
+					swprintf_s(buf, 100, L"%.2f - %S\r\n", l.rate, l.fullname.c_str());
+					s += buf;
+				}
+				return s;
+			};
+
+		TASKDIALOGCONFIG tdc = {};
+		tdc.cbSize = sizeof(tdc);
+		tdc.hwndParent = hParent;
+		tdc.pszWindowTitle = L"Copilot Status";
+		tdc.pszMainInstruction = L"Copilot Status";
+		auto status = getst();
+		tdc.pszContent = status.c_str();
+		TASKDIALOG_BUTTON buttons[5] = {};
+		buttons[0].pszButtonText = L"Run CLI";
+		buttons[0].nButtonID = 102;
+		buttons[1].pszButtonText = L"Refresh";
+		buttons[1].nButtonID = 101;
+		buttons[2].pszButtonText = L"Close";
+		buttons[2].nButtonID = IDCANCEL;
+		tdc.pButtons = buttons;
+		tdc.cButtons = 3;
+		struct P
+		{
+			COPILOT_STATUS* pst = 0;
+			std::wstring folder;
+			std::wstring* pStatus;
+			std::function<std::wstring()> getStatus;
+		};
+		P p;
+		p.folder = folder;
+		p.pst = &st;
+		p.pStatus = &status;
+		p.getStatus = getst;
+		tdc.lpCallbackData = (LPARAM) & p;
+		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpData)->HRESULT
+		{
+			P* p = (P*)lpData;
+			if (msg == TDN_CREATED)
+			{
+				return S_FALSE;
+			}
+			if (msg == TDN_BUTTON_CLICKED)
+			{
+				int id = (int)wParam;
+				if (id == 102)
+				{
+					auto cop_exe = std::wstring(p->pst->folder) + L"\\copilot.exe";
+					COPILOT::Run(cop_exe.c_str(), false, CREATE_NEW_CONSOLE);
+				}
+				if (id == 101)
+				{
+					*p->pst = COPILOT::Status(p->folder.c_str(), true);
+					*p->pStatus = p->getStatus();
+					SendMessage(hwnd, TDM_SET_ELEMENT_TEXT, TDE_CONTENT, (LPARAM)p->pStatus->c_str());
+					return S_FALSE;
+				}
+				if (id == IDCANCEL)
+					return S_OK;
+				return S_FALSE;
+			}
+			return S_OK;
+		};
+		TaskDialogIndirect(&tdc, 0, 0, 0);
+	}
+
 	static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false)
 	{
 		static COPILOT_STATUS s;

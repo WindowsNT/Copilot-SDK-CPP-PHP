@@ -181,6 +181,7 @@ void TestCopilot()
     reply = cop.State();
     AskQuestion(cop,true,true,false);
     cop.EndInteractive();
+	cop.ShowStatus(YOUR_COPILOT_FOLDER.c_str(),false,0);
 }
 
 
