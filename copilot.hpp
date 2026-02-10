@@ -468,7 +468,7 @@ public:
 		p.pStatus = &status;
 		p.getStatus = getst;
 		tdc.lpCallbackData = (LPARAM) & p;
-		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpData)->HRESULT
+		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM, LONG_PTR lpData)->HRESULT
 		{
 			P* p = (P*)lpData;
 			if (msg == TDN_CREATED)
