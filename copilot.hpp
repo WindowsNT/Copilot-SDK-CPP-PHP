@@ -412,15 +412,23 @@ public:
 		TASKDIALOG_BUTTON buttons[5] = {};
 		if (!st.Installed)
 		{
+#ifdef TURBO_PLAY
 			buttons[0].pszButtonText = L"Install";
 			buttons[0].nButtonID = 103;
 			buttons[1].pszButtonText = L"Close";
 			buttons[1].nButtonID = IDCANCEL;
 			tdc.pButtons = buttons;
 			tdc.cButtons = 2;
+#else
+			buttons[0].pszButtonText = L"Close";
+			buttons[0].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = 1;
+#endif
 		}
 		else
 		{
+#ifdef TURBO_PLAY
 			buttons[0].pszButtonText = L"Update";
 			buttons[0].nButtonID = 103;
 			buttons[1].pszButtonText = L"Run CLI";
@@ -431,6 +439,16 @@ public:
 			buttons[3].nButtonID = IDCANCEL;
 			tdc.pButtons = buttons;
 			tdc.cButtons = 4;
+#else
+			buttons[0].pszButtonText = L"Run CLI";
+			buttons[0].nButtonID = 102;
+			buttons[1].pszButtonText = L"Refresh";
+			buttons[1].nButtonID = 101;
+			buttons[2].pszButtonText = L"Close";
+			buttons[2].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = 3;
+#endif
 		}
 		struct P
 		{
@@ -455,6 +473,7 @@ public:
 			if (msg == TDN_BUTTON_CLICKED)
 			{
 				int id = (int)wParam;
+#ifdef TURBO_PLAY
 				if (id == 103)
 				{
 					void CopUpdate();
@@ -462,6 +481,7 @@ public:
 					Reshow = 1;
 					return S_OK;
 				}
+#endif
 				if (id == 102)
 				{
 					PushPopDirX pp(p->folder.c_str());
