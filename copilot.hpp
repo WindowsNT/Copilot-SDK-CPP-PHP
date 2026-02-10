@@ -375,30 +375,29 @@ public:
 	static void ShowStatus(const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
 	{
 		auto st = Status(folder, Refresh);
-
+		static bool Reshow = false;
 		auto getst = [&]() -> std::wstring
 			{
 				std::wstring s;
-
 				if (st.Installed)
-					s += std::wstring(L"Installed: ") + std::wstring(L"Yes\r\n");
-				else
-					s += std::wstring(L"Installed: ") + std::wstring(L"No\r\n");
-				if (st.Connected)
-					s += std::wstring(L"Status: ") + std::wstring(L"Connected\r\n");
-				else
-					s += std::wstring(L"Status: ") + std::wstring(L"Disconnected\r\n");
-				if (st.Authenticated)
-					s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated\r\n");
-				else
-					s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated\r\n");
-				s += L"\r\n\r\n";
-				s += L"Models\r\n----------------------------------------------------\r\n";
-				for (auto& l : st.models)
 				{
-					wchar_t buf[200] = {};
-					swprintf_s(buf, 100, L"%.2f - %S\r\n", l.rate, l.fullname.c_str());
-					s += buf;
+					s += std::wstring(L"Installed: ") + std::wstring(L"Yes\r\n");
+					if (st.Connected)
+						s += std::wstring(L"Status: ") + std::wstring(L"Connected\r\n");
+					else
+						s += std::wstring(L"Status: ") + std::wstring(L"Disconnected\r\n");
+					if (st.Authenticated)
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated\r\n");
+					else
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated\r\n");
+					s += L"\r\n\r\n";
+					s += L"Models\r\n----------------------------------------------------\r\n";
+					for (auto& l : st.models)
+					{
+						wchar_t buf[200] = {};
+						swprintf_s(buf, 100, L"%.2f - %S\r\n", l.rate, l.fullname.c_str());
+						s += buf;
+					}
 				}
 				return s;
 			};
@@ -411,14 +410,28 @@ public:
 		auto status = getst();
 		tdc.pszContent = status.c_str();
 		TASKDIALOG_BUTTON buttons[5] = {};
-		buttons[0].pszButtonText = L"Run CLI";
-		buttons[0].nButtonID = 102;
-		buttons[1].pszButtonText = L"Refresh";
-		buttons[1].nButtonID = 101;
-		buttons[2].pszButtonText = L"Close";
-		buttons[2].nButtonID = IDCANCEL;
-		tdc.pButtons = buttons;
-		tdc.cButtons = 3;
+		if (!st.Installed)
+		{
+			buttons[0].pszButtonText = L"Install";
+			buttons[0].nButtonID = 103;
+			buttons[1].pszButtonText = L"Close";
+			buttons[1].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = 2;
+		}
+		else
+		{
+			buttons[0].pszButtonText = L"Update";
+			buttons[0].nButtonID = 103;
+			buttons[1].pszButtonText = L"Run CLI";
+			buttons[1].nButtonID = 102;
+			buttons[2].pszButtonText = L"Refresh";
+			buttons[2].nButtonID = 101;
+			buttons[3].pszButtonText = L"Close";
+			buttons[3].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = 4;
+		}
 		struct P
 		{
 			COPILOT_STATUS* pst = 0;
@@ -442,10 +455,19 @@ public:
 			if (msg == TDN_BUTTON_CLICKED)
 			{
 				int id = (int)wParam;
+				if (id == 103)
+				{
+					void CopUpdate();
+					CopUpdate();
+					Reshow = 1;
+					return S_OK;
+				}
 				if (id == 102)
 				{
+					PushPopDirX pp(p->folder.c_str());
 					auto cop_exe = std::wstring(p->pst->folder) + L"\\copilot.exe";
 					COPILOT::Run(cop_exe.c_str(), false, CREATE_NEW_CONSOLE);
+					return S_FALSE;
 				}
 				if (id == 101)
 				{
@@ -460,7 +482,15 @@ public:
 			}
 			return S_OK;
 		};
-		TaskDialogIndirect(&tdc, 0, 0, 0);
+		for (;;)
+		{
+			TaskDialogIndirect(&tdc, 0, 0, 0);
+			if (!Reshow)
+				break;
+			Reshow = 0;
+			ShowStatus(folder, true, hParent);
+			break;
+		}
 	}
 
 	static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false)
@@ -494,6 +524,7 @@ public:
 		s.Connected = conn == L"connected";
 		auto auth = cop.AuthState();
 		s.Authenticated = auth == L"true";
+		s.models.clear();
 		if (s.Authenticated)
 			s.models = cop.copilot_model_list();
 		if (s.OllamaInstalled)
