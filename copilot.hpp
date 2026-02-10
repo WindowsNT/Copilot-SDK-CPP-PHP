@@ -54,6 +54,7 @@ enum class LlamaBackend
 
 inline HRESULT OllamaRunning = S_FALSE;
 
+void CopUpdate(HWND,int What); // 0 Install 1 Update 2 Remove
 
 struct TOOL_PARAM
 {
@@ -375,6 +376,11 @@ public:
 #pragma comment(lib,"Comctl32.lib")
 	static void ShowStatus(bool HasInstaller,const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
 	{
+		auto def_folder = COPILOT::GetDefaultCopilotfolder();
+		if (!folder)
+			folder = def_folder.c_str();
+		if (!wcslen(folder))
+			folder = def_folder.c_str();
 		auto st = Status(folder, Refresh);
 		static bool Reshow = false;
 		auto getst = [&]() -> std::wstring
@@ -392,7 +398,8 @@ public:
 					else
 						s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated\r\n");
 					s += L"\r\n\r\n";
-					s += L"Models\r\n----------------------------------------------------\r\n";
+					if (!st.models.empty())
+						s += L"Models\r\n----------------------------------------------------\r\n";
 					for (auto& l : st.models)
 					{
 						wchar_t buf[200] = {};
@@ -400,6 +407,8 @@ public:
 						s += buf;
 					}
 				}
+				else
+					s = L"Copilot is not installed.";
 				return s;
 			};
 
@@ -439,19 +448,25 @@ public:
 				buttons[1].pszButtonText = L"Installation Folder";
 				buttons[1].nButtonID = 104;
 				buttons[2].pszButtonText = L"Run CLI";
+				if (!st.Authenticated)
+					buttons[2].pszButtonText = L"Authenticate";
 				buttons[2].nButtonID = 102;
-				buttons[3].pszButtonText = L"Refresh";
-				buttons[3].nButtonID = 101;
-				buttons[4].pszButtonText = L"Close";
-				buttons[4].nButtonID = IDCANCEL;
+				buttons[3].pszButtonText = L"Remove";
+				buttons[3].nButtonID = 105;
+				buttons[4].pszButtonText = L"Refresh";
+				buttons[4].nButtonID = 101;
+				buttons[5].pszButtonText = L"Close";
+				buttons[5].nButtonID = IDCANCEL;
 				tdc.pButtons = buttons;
-				tdc.cButtons = 5;
+				tdc.cButtons = 6;
 			}
 			else
 			{
 				buttons[0].pszButtonText = L"Installation Folder";
 				buttons[0].nButtonID = 104;
 				buttons[1].pszButtonText = L"Run CLI";
+				if (!st.Authenticated)
+					buttons[1].pszButtonText = L"Authenticate";
 				buttons[1].nButtonID = 102;
 				buttons[2].pszButtonText = L"Refresh";
 				buttons[2].nButtonID = 101;
@@ -491,8 +506,13 @@ public:
 				}
 				if (id == 103)
 				{
-					void CopUpdate();
-					CopUpdate();
+					CopUpdate(hwnd,p->pst->Installed ? 1 : 0);
+					Reshow = 1;
+					return S_OK;
+				}
+				if (id == 105)
+				{
+					CopUpdate(hwnd, 2);
 					Reshow = 1;
 					return S_OK;
 				}

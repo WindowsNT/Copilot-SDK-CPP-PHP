@@ -139,7 +139,7 @@ void TestLLama()
 
 }
 
-void CopUpdate()
+void CopUpdate(HWND hh,int What)
 {
 
 }
