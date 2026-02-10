@@ -141,6 +141,26 @@ void TestLLama()
 
 void TestCopilot()
 {
+    auto status = COPILOT::Status(YOUR_COPILOT_FOLDER.c_str(), false);
+    if (!status.Installed)
+    {
+          MessageBox(0, L"Copilot is not installed, please install it first.", 0, 0);
+          return;
+    }
+    if (!status.Authenticated)
+    {
+		if (MessageBox(0, L"You are not authenticated, do you want to login now?", 0, MB_YESNO) == IDYES)
+        {
+			auto copexe = YOUR_COPILOT_FOLDER;
+            copexe += L"\\copilot.exe";
+            COPILOT::Run(copexe.c_str(),false,CREATE_NEW_CONSOLE);
+			return;
+        }
+        else
+        {
+            return;
+        }
+    }
 	COPILOT_PARAMETERS cp;
 	cp.folder = YOUR_COPILOT_FOLDER;
     cp.model = "gpt-5-mini";
@@ -156,17 +176,10 @@ void TestCopilot()
         {"date", "int", "Date to get the weather for"}
         });
 
-    [[maybe_unused]] auto sdk_models = cop.copilot_model_list();
     cop.BeginInteractive();
     auto reply = cop.Ping();
     reply = cop.State();
-    reply = cop.AuthState();
-    if (reply == L"false")
-    {
-		MessageBox(0, L"You are not authenticated, please run copilot.exe and /login.", 0, 0);
-    }
-    else
-        AskQuestion(cop,true,true,false);
+    AskQuestion(cop,true,true,false);
     cop.EndInteractive();
 }
 
@@ -188,6 +201,8 @@ void TestOllama()
 
 int main()
 {
+	WSADATA wsaData;
+	WSAStartup(MAKEWORD(2, 2), &wsaData);
 
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD dwMode = 0;

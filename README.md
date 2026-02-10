@@ -14,6 +14,23 @@ Create a folder where [llama-server](https://github.com/ggml-org/llama.cpp/relea
 # Ollama 
 Download and run [Ollama](https://ollama.com/), specify to make it visible to the network.
 
+# Installation and Authentication check
+```cpp
+struct COPILOT_STATUS
+{
+	bool StatusValid = false;
+	bool Installed = false;
+	std::wstring folder;
+	bool OllamaInstalled = false;
+	bool Connected = false;
+	bool Authenticated = false;
+	std::vector<COPILOT_MODEL> models;
+};
+static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false);
+```
+
+Call this method in a thread so you don't block the UI. If Installed is true and Authenticated is false, then run copilot.exe in a new console. 
+
 # Usage
 ```cpp
 struct COPILOT_PARAMETERS

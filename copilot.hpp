@@ -141,14 +141,28 @@ struct COPILOT_ANSWER
 	}
 };
 
+
+
 struct COPILOT_MODEL
 {
 	std::string id;
 	std::string fullname;
 	float rate = 0.0f;
-	bool Premium = 0;
+	bool SupportsVision = 0;
 	bool Ollama = 0;
 };
+
+struct COPILOT_STATUS
+{
+	bool StatusValid = false;
+	bool Installed = false;
+	std::wstring folder;
+	bool OllamaInstalled = false;
+	bool Connected = false;
+	bool Authenticated = false;
+	std::vector<COPILOT_MODEL> models;
+};
+
 
 struct COPILOT_SDK_MODEL
 {
@@ -346,14 +360,58 @@ public:
 	}
 
 
-	COPILOT(COPILOT_PARAMETERS& cx)
+	COPILOT(COPILOT_PARAMETERS& cx,bool NoOllama = false)
 	{
 		cp = cx;
-		DetectOllamaRunning();
+		if (NoOllama == false)
+			DetectOllamaRunning();
 	}
 	~COPILOT()
 	{
 		EndInteractive();
+	}
+
+	static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false)
+	{
+		static COPILOT_STATUS s;
+		if (Refresh)
+			s.StatusValid = 0;
+		if (s.StatusValid && s.folder == folder)
+			return s;
+
+		s.StatusValid = true;
+		wchar_t path[1000] = {};
+		swprintf_s(path, 1000, L"%s\\copilot.exe", folder);
+		if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
+		{
+			s.Installed = false;
+			return s;
+		}
+		s.folder = folder;
+
+		COPILOT_PARAMETERS cp;
+		cp.folder = folder;
+		s.Installed = true;
+		cp.Debug = false;
+		TryOllamaRunning();
+		if (OllamaRunning == S_OK)
+			s.OllamaInstalled = true;
+		COPILOT cop(cp, true);
+		cop.BeginInteractive();
+		auto conn = cop.State();
+		s.Connected = conn == L"connected";
+		auto auth = cop.AuthState();
+		s.Authenticated = auth == L"true";
+		if (s.Authenticated)
+			s.models = cop.copilot_model_list();
+		if (s.OllamaInstalled)
+		{
+			auto ollama_models = ollama_list();
+			for(auto& o : ollama_models)
+				s.models.push_back(o);
+		}
+		cop.EndInteractive();
+		return s;
 	}
 
 	bool AddTool(size_t idll,std::string tool_name,std::string tool_desc,std::initializer_list<TOOL_PARAM> params)
@@ -424,7 +482,6 @@ public:
 			m.id = name;
 			m.fullname = name;
 			m.rate = 0.0f;
-			m.Premium = 0;
 			m.Ollama = 1;
 			models.push_back(m);
 		}
@@ -442,7 +499,7 @@ public:
 			m.fullname = sdk_model.name;
 			m.id = sdk_model.id;
 			m.rate = sdk_model.BillingMultiplier;
-			m.Premium = sdk_model.BillingMultiplier > 1.0f;
+			m.SupportsVision = sdk_model.SupportsVision;
 			m.Ollama = 0;
 			models.push_back(m);
 		}
@@ -1097,6 +1154,7 @@ public:
 						auto& vision = limits["vision"];
 						if (vision.contains("supported_media_types"))
 						{
+							m.SupportsVision = true;
 							for (auto& mt : vision["supported_media_types"])
 								m.supportedvisionmediatypes.push_back(mt.get<std::string>());
 						}
