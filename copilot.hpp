@@ -10,6 +10,7 @@
 #include <string>
 #include <queue>
 #include <mutex>
+#include <shellapi.h>
 #include <functional>
 #include <vector>
 #include <map>
@@ -409,7 +410,7 @@ public:
 		tdc.pszMainInstruction = L"Copilot Status";
 		auto status = getst();
 		tdc.pszContent = status.c_str();
-		TASKDIALOG_BUTTON buttons[5] = {};
+		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
 #ifdef TURBO_PLAY
@@ -431,6 +432,19 @@ public:
 #ifdef TURBO_PLAY
 			buttons[0].pszButtonText = L"Update";
 			buttons[0].nButtonID = 103;
+			buttons[1].pszButtonText = L"Installation Folder";
+			buttons[1].nButtonID = 104;
+			buttons[2].pszButtonText = L"Run CLI";
+			buttons[2].nButtonID = 102;
+			buttons[3].pszButtonText = L"Refresh";
+			buttons[3].nButtonID = 101;
+			buttons[4].pszButtonText = L"Close";
+			buttons[4].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = 5;
+#else
+			buttons[0].pszButtonText = L"Installation Folder";
+			buttons[0].nButtonID = 104;
 			buttons[1].pszButtonText = L"Run CLI";
 			buttons[1].nButtonID = 102;
 			buttons[2].pszButtonText = L"Refresh";
@@ -439,15 +453,6 @@ public:
 			buttons[3].nButtonID = IDCANCEL;
 			tdc.pButtons = buttons;
 			tdc.cButtons = 4;
-#else
-			buttons[0].pszButtonText = L"Run CLI";
-			buttons[0].nButtonID = 102;
-			buttons[1].pszButtonText = L"Refresh";
-			buttons[1].nButtonID = 101;
-			buttons[2].pszButtonText = L"Close";
-			buttons[2].nButtonID = IDCANCEL;
-			tdc.pButtons = buttons;
-			tdc.cButtons = 3;
 #endif
 		}
 		struct P
@@ -473,6 +478,11 @@ public:
 			if (msg == TDN_BUTTON_CLICKED)
 			{
 				int id = (int)wParam;
+				if (id == 104)
+				{
+					ShellExecute(0, L"open", p->pst->folder.c_str(), 0, 0, SW_SHOW);
+					return S_FALSE;
+				}
 #ifdef TURBO_PLAY
 				if (id == 103)
 				{
