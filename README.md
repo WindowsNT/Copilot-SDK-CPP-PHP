@@ -29,7 +29,8 @@ struct COPILOT_STATUS
 static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false);
 ```
 
-Call this method in a thread so you don't block the UI. If Installed is true and Authenticated is false, then run copilot.exe in a new console. 
+Call this method in a thread or a std::shared_future so you don't block the UI. If Installed is true and Authenticated is false, then run copilot.exe in a new console. If this method is called again and Refresh is false, it will return the cached status. 
+If Refresh is true, it will refresh the status by checking the installation and authentication again.
 
 # Usage
 ```cpp
