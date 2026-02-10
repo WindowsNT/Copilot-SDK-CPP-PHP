@@ -139,6 +139,11 @@ void TestLLama()
 
 }
 
+void CopUpdate()
+{
+
+}
+
 void TestCopilot()
 {
     auto status = COPILOT::Status(YOUR_COPILOT_FOLDER.c_str(), false);
@@ -181,7 +186,7 @@ void TestCopilot()
     reply = cop.State();
     AskQuestion(cop,true,true,false);
     cop.EndInteractive();
-	cop.ShowStatus(YOUR_COPILOT_FOLDER.c_str(),false,0);
+	cop.ShowStatus(false,YOUR_COPILOT_FOLDER.c_str(),false,0);
 }
 
 

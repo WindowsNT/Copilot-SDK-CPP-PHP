@@ -373,7 +373,7 @@ public:
 	}
 
 #pragma comment(lib,"Comctl32.lib")
-	static void ShowStatus(const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
+	static void ShowStatus(bool HasInstaller,const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
 	{
 		auto st = Status(folder, Refresh);
 		static bool Reshow = false;
@@ -413,47 +413,53 @@ public:
 		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
-#ifdef TURBO_PLAY
-			buttons[0].pszButtonText = L"Install";
-			buttons[0].nButtonID = 103;
-			buttons[1].pszButtonText = L"Close";
-			buttons[1].nButtonID = IDCANCEL;
-			tdc.pButtons = buttons;
-			tdc.cButtons = 2;
-#else
-			buttons[0].pszButtonText = L"Close";
-			buttons[0].nButtonID = IDCANCEL;
-			tdc.pButtons = buttons;
-			tdc.cButtons = 1;
-#endif
+			if (HasInstaller)
+			{
+				buttons[0].pszButtonText = L"Install";
+				buttons[0].nButtonID = 103;
+				buttons[1].pszButtonText = L"Close";
+				buttons[1].nButtonID = IDCANCEL;
+				tdc.pButtons = buttons;
+				tdc.cButtons = 2;
+			}
+			else
+			{
+				buttons[0].pszButtonText = L"Close";
+				buttons[0].nButtonID = IDCANCEL;
+				tdc.pButtons = buttons;
+				tdc.cButtons = 1;
+			}
 		}
 		else
 		{
-#ifdef TURBO_PLAY
-			buttons[0].pszButtonText = L"Update";
-			buttons[0].nButtonID = 103;
-			buttons[1].pszButtonText = L"Installation Folder";
-			buttons[1].nButtonID = 104;
-			buttons[2].pszButtonText = L"Run CLI";
-			buttons[2].nButtonID = 102;
-			buttons[3].pszButtonText = L"Refresh";
-			buttons[3].nButtonID = 101;
-			buttons[4].pszButtonText = L"Close";
-			buttons[4].nButtonID = IDCANCEL;
-			tdc.pButtons = buttons;
-			tdc.cButtons = 5;
-#else
-			buttons[0].pszButtonText = L"Installation Folder";
-			buttons[0].nButtonID = 104;
-			buttons[1].pszButtonText = L"Run CLI";
-			buttons[1].nButtonID = 102;
-			buttons[2].pszButtonText = L"Refresh";
-			buttons[2].nButtonID = 101;
-			buttons[3].pszButtonText = L"Close";
-			buttons[3].nButtonID = IDCANCEL;
-			tdc.pButtons = buttons;
-			tdc.cButtons = 4;
-#endif
+			if (HasInstaller)
+			{
+				buttons[0].pszButtonText = L"Update";
+				buttons[0].nButtonID = 103;
+				buttons[1].pszButtonText = L"Installation Folder";
+				buttons[1].nButtonID = 104;
+				buttons[2].pszButtonText = L"Run CLI";
+				buttons[2].nButtonID = 102;
+				buttons[3].pszButtonText = L"Refresh";
+				buttons[3].nButtonID = 101;
+				buttons[4].pszButtonText = L"Close";
+				buttons[4].nButtonID = IDCANCEL;
+				tdc.pButtons = buttons;
+				tdc.cButtons = 5;
+			}
+			else
+			{
+				buttons[0].pszButtonText = L"Installation Folder";
+				buttons[0].nButtonID = 104;
+				buttons[1].pszButtonText = L"Run CLI";
+				buttons[1].nButtonID = 102;
+				buttons[2].pszButtonText = L"Refresh";
+				buttons[2].nButtonID = 101;
+				buttons[3].pszButtonText = L"Close";
+				buttons[3].nButtonID = IDCANCEL;
+				tdc.pButtons = buttons;
+				tdc.cButtons = 4;
+			}
 		}
 		struct P
 		{
@@ -483,7 +489,6 @@ public:
 					ShellExecute(0, L"open", p->pst->folder.c_str(), 0, 0, SW_SHOW);
 					return S_FALSE;
 				}
-#ifdef TURBO_PLAY
 				if (id == 103)
 				{
 					void CopUpdate();
@@ -491,7 +496,6 @@ public:
 					Reshow = 1;
 					return S_OK;
 				}
-#endif
 				if (id == 102)
 				{
 					PushPopDirX pp(p->folder.c_str());
@@ -518,7 +522,7 @@ public:
 			if (!Reshow)
 				break;
 			Reshow = 0;
-			ShowStatus(folder, true, hParent);
+			ShowStatus(HasInstaller,folder, true, hParent);
 			break;
 		}
 	}
