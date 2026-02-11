@@ -2,20 +2,22 @@
 // Copilot Class
 
 #pragma once
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#include <WS2tcpip.h>
-#include <wincrypt.h>   
-#include <ShlObj.h>
 #include <string>
 #include <queue>
 #include <mutex>
-#include <shellapi.h>
 #include <functional>
 #include <vector>
 #include <map>
 #include <any>
 #include <sstream>
+
+
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <WS2tcpip.h>
+#include <wincrypt.h>   
+#include <ShlObj.h>
+#include <shellapi.h>
 #include <wininet.h>
 #include <dxgi.h>
 #include <atlbase.h>
@@ -25,9 +27,9 @@
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "wininet.lib")
 #pragma comment(lib, "ws2_32.lib")
-
 #include "stdinout2.h"
 #include "rest.h"
+
 #include "json.hpp"
 
 
@@ -54,7 +56,7 @@ enum class LlamaBackend
 
 inline HRESULT OllamaRunning = S_FALSE;
 
-void CopUpdate(HWND,int What); // 0 Install 1 Update 2 Remove
+HRESULT CopUpdate(HWND,int What); // 0 Install 1 Update 2 Remove 3 Check
 
 struct TOOL_PARAM
 {
@@ -158,6 +160,7 @@ struct COPILOT_STATUS
 {
 	bool StatusValid = false;
 	bool Installed = false;
+	std::shared_future<HRESULT> NeedUpdate;
 	std::wstring folder;
 	bool OllamaInstalled = false;
 	bool Connected = false;
@@ -388,15 +391,21 @@ public:
 				std::wstring s;
 				if (st.Installed)
 				{
-					s += std::wstring(L"Installed: ") + std::wstring(L"Yes\r\n");
+					s += std::wstring(L"Installed: ") + std::wstring(L"Yes.\r\n");
 					if (st.Connected)
-						s += std::wstring(L"Status: ") + std::wstring(L"Connected\r\n");
+						s += std::wstring(L"Status: ") + std::wstring(L"Connected.\r\n");
 					else
-						s += std::wstring(L"Status: ") + std::wstring(L"Disconnected\r\n");
+						s += std::wstring(L"Status: ") + std::wstring(L"Disconnected.\r\n");
 					if (st.Authenticated)
-						s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated\r\n");
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated.\r\n");
 					else
-						s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated\r\n");
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated.\r\n");
+					if (st.NeedUpdate.valid() && st.NeedUpdate.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+					{
+						if (st.NeedUpdate.get() == E_PENDING)
+							s += std::wstring(L"Update Available.\r\n");
+					}
+
 					s += L"\r\n\r\n";
 					if (!st.models.empty())
 						s += L"Models\r\n----------------------------------------------------\r\n";
@@ -443,22 +452,35 @@ public:
 		{
 			if (HasInstaller)
 			{
-				buttons[0].pszButtonText = L"Update";
-				buttons[0].nButtonID = 103;
-				buttons[1].pszButtonText = L"Installation Folder";
-				buttons[1].nButtonID = 104;
-				buttons[2].pszButtonText = L"Run CLI";
+				int ni = 0;
+				if (st.NeedUpdate.valid() && st.NeedUpdate.wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+				{
+					auto hr = st.NeedUpdate.get();
+					if (hr == E_PENDING)
+					{ 
+						buttons[ni].pszButtonText = L"Update";
+						buttons[ni].nButtonID = 103;
+						ni++;
+					}
+				}
+				buttons[ni].pszButtonText = L"Installation Folder";
+				buttons[ni].nButtonID = 104;
+				ni++;
+				buttons[ni].pszButtonText = L"Run CLI";
 				if (!st.Authenticated)
-					buttons[2].pszButtonText = L"Authenticate";
-				buttons[2].nButtonID = 102;
-				buttons[3].pszButtonText = L"Remove";
-				buttons[3].nButtonID = 105;
-				buttons[4].pszButtonText = L"Refresh";
-				buttons[4].nButtonID = 101;
-				buttons[5].pszButtonText = L"Close";
-				buttons[5].nButtonID = IDCANCEL;
+					buttons[ni].pszButtonText = L"Authenticate";
+				buttons[ni].nButtonID = 102;
+				ni++;
+				buttons[ni].pszButtonText = L"Remove";
+				buttons[ni].nButtonID = 105;
+				ni++;
+				buttons[ni].pszButtonText = L"Refresh";
+				buttons[ni].nButtonID = 101;
+				ni++;
+				buttons[ni].pszButtonText = L"Close";
+				buttons[ni].nButtonID = IDCANCEL;
 				tdc.pButtons = buttons;
-				tdc.cButtons = 6;
+				tdc.cButtons = ni + 1;
 			}
 			else
 			{
@@ -506,13 +528,15 @@ public:
 				}
 				if (id == 103)
 				{
-					CopUpdate(hwnd,p->pst->Installed ? 1 : 0);
+					if (FAILED(CopUpdate(hwnd,p->pst->Installed ? 1 : 0)))
+						return S_FALSE;
 					Reshow = 1;
 					return S_OK;
 				}
 				if (id == 105)
 				{
-					CopUpdate(hwnd, 2);
+					if (FAILED(CopUpdate(hwnd, 2)))
+						return S_FALSE;
 					Reshow = 1;
 					return S_OK;
 				}
@@ -568,6 +592,12 @@ public:
 		COPILOT_PARAMETERS cp;
 		cp.folder = folder;
 		s.Installed = true;
+		s.NeedUpdate = std::async([]() -> HRESULT
+			{
+				auto hr = CopUpdate(0, 3);
+				return hr;
+			});
+
 		cp.Debug = false;
 		TryOllamaRunning();
 		if (OllamaRunning == S_OK)
@@ -872,7 +902,7 @@ public:
 		NextAttachments.push_back(a);
 	}
 
-
+	bool CheckProcess = true;
 	std::shared_ptr<COPILOT_ANSWER> PushPrompt(const std::wstring& prompt,bool W, HRESULT(__stdcall* cb1)(int Status,std::string token, LPARAM lp) = 0,LPARAM lpx = 0)
 	{
 		auto answer = std::make_shared<COPILOT_ANSWER>();
@@ -905,12 +935,15 @@ public:
 					break;
 				}
 				// Check process 
-				DWORD ec = 0;
-				GetExitCodeProcess(hProcess, &ec);
-				if (ec != STILL_ACTIVE)
+				if (CheckProcess)
 				{
-					ReleaseAnswer(answer->key);
-					break;
+					DWORD ec = 0;
+					GetExitCodeProcess(hProcess, &ec);
+					if (ec != STILL_ACTIVE)
+					{
+						ReleaseAnswer(answer->key);
+						break;
+					}
 				}
 			}
 		}
@@ -1632,7 +1665,7 @@ async def main():
 			# parse direct message
              await session.send_and_wait(json.loads(user_input))
         else:
-            await session.send_and_wait({"prompt": user_input})
+            await session.send_and_wait({"prompt": user_input}, timeout=None)
         # also send --end--
         end_payload = "--end--".encode("utf-8")
         print("");
@@ -1897,10 +1930,13 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		for (; p1 && p2 ;)
 		{
 			// If ended ?
-			DWORD ec = 0;
-			GetExitCodeProcess(hProcess, &ec);
-			if (ec != STILL_ACTIVE)
-				break;
+			if (CheckProcess)
+			{
+				DWORD ec = 0;
+				GetExitCodeProcess(hProcess, &ec);
+				if (ec != STILL_ACTIVE)
+					break;
+			}
 			auto q = pro(lp);
 			std::string prompt = toc(q.prompt.c_str());
 			if (q.attachments.size())
@@ -1956,12 +1992,15 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 						if (wai == WAIT_OBJECT_0)
 							break;
 						// Check Process
-						DWORD ec = 0;
-						GetExitCodeProcess(hProcess, &ec);
-						if (ec != STILL_ACTIVE)
+						if (CheckProcess)
 						{
-							Ended = true;
-							break;
+							DWORD ec = 0;
+							GetExitCodeProcess(hProcess, &ec);
+							if (ec != STILL_ACTIVE)
+							{
+								Ended = true;
+								break;
+							}
 						}
 
 					}
