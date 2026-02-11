@@ -139,9 +139,9 @@ void TestLLama()
 
 }
 
-void CopUpdate(HWND hh,int What)
+HRESULT CopUpdate(HWND hh,int What)
 {
-
+    return E_NOTIMPL;
 }
 
 void TestCopilot()

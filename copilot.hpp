@@ -1,17 +1,18 @@
-
 // Copilot Class
-
 #pragma once
 #include <string>
 #include <queue>
 #include <mutex>
+#include <filesystem>
 #include <functional>
+#include <future>
 #include <vector>
 #include <map>
 #include <any>
 #include <sstream>
 
 
+#ifndef LINUX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <WS2tcpip.h>
@@ -29,13 +30,17 @@
 #pragma comment(lib, "ws2_32.lib")
 #include "stdinout2.h"
 #include "rest.h"
+#else
+typedef long HRESULT;
+typedef long long LPARAM;
+#endif
 
 #include "json.hpp"
 
 
-const UINT VENDOR_NVIDIA = 0x10DE;
-const UINT VENDOR_AMD = 0x1002;
-const UINT VENDOR_INTEL = 0x8086;
+const uint16_t VENDOR_NVIDIA = 0x10DE;
+const uint16_t VENDOR_AMD = 0x1002;
+const uint16_t VENDOR_INTEL = 0x8086;
 
 struct GpuCaps
 {
@@ -54,9 +59,10 @@ enum class LlamaBackend
 };
 
 
+#ifndef LINUX
 inline HRESULT OllamaRunning = S_FALSE;
-
 HRESULT CopUpdate(HWND,int What); // 0 Install 1 Update 2 Remove 3 Check
+#endif
 
 struct TOOL_PARAM
 {
@@ -84,18 +90,18 @@ struct DLL_LIST
 
 class PushPopDirX
 {
-	std::vector<wchar_t> cd;
+	std::wstring cd;
 public:
 
 	PushPopDirX(const wchar_t* f)
 	{
 		cd.resize(1000);
-		GetCurrentDirectory(1000, cd.data());
-		SetCurrentDirectory(f);
+		cd  = std::filesystem::current_path();
+		std::filesystem::current_path(f);
 	}
 	~PushPopDirX()
 	{
-		SetCurrentDirectory(cd.data());
+		std::filesystem::current_path(cd);
 	}
 };
 
@@ -207,6 +213,9 @@ class COPILOT
 
 	std::wstring TempFile(const wchar_t* etx)
 	{
+#ifdef LINUX
+		
+#else
 		wchar_t path[1000] = {};
 		GetTempPathW(1000, path);
 		wchar_t fi[1000] = {};
@@ -219,6 +228,7 @@ class COPILOT
 			s += etx;
 		}
 		return s;
+#endif
 	}
 
 	
