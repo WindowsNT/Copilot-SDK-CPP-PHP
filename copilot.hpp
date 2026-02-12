@@ -439,7 +439,15 @@ public:
 		tdc.pszMainInstruction = L"Copilot Status";
 		auto status = getst();
 		tdc.pszContent = status.c_str();
-		tdc.pszFooter = L"Your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> <a href=\"https://github.com/settings/models\">models</a>";
+		if (st.Installed)
+		{
+			if (HasInstaller)
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>.";
+			else
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a>.";
+		}
+		else
+			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. ";
 		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
@@ -475,16 +483,10 @@ public:
 						ni++;
 					}
 				}
-				buttons[ni].pszButtonText = L"Installation Folder";
-				buttons[ni].nButtonID = 104;
-				ni++;
 				buttons[ni].pszButtonText = L"Run CLI";
 				if (!st.Authenticated)
 					buttons[ni].pszButtonText = L"Authenticate";
 				buttons[ni].nButtonID = 102;
-				ni++;
-				buttons[ni].pszButtonText = L"Remove";
-				buttons[ni].nButtonID = 105;
 				ni++;
 				buttons[ni].pszButtonText = L"Refresh";
 				buttons[ni].nButtonID = 101;
@@ -496,18 +498,16 @@ public:
 			}
 			else
 			{
-				buttons[0].pszButtonText = L"Installation Folder";
-				buttons[0].nButtonID = 104;
-				buttons[1].pszButtonText = L"Run CLI";
+				buttons[0].pszButtonText = L"Run CLI";
 				if (!st.Authenticated)
-					buttons[1].pszButtonText = L"Authenticate";
-				buttons[1].nButtonID = 102;
-				buttons[2].pszButtonText = L"Refresh";
-				buttons[2].nButtonID = 101;
-				buttons[3].pszButtonText = L"Close";
-				buttons[3].nButtonID = IDCANCEL;
+					buttons[0].pszButtonText = L"Authenticate";
+				buttons[0].nButtonID = 102;
+				buttons[1].pszButtonText = L"Refresh";
+				buttons[1].nButtonID = 101;
+				buttons[2].pszButtonText = L"Close";
+				buttons[2].nButtonID = IDCANCEL;
 				tdc.pButtons = buttons;
-				tdc.cButtons = 4;
+				tdc.cButtons = 3;
 			}
 		}
 		struct P
@@ -532,27 +532,30 @@ public:
 			}
 			if (msg == TDN_HYPERLINK_CLICKED)
 			{
+				std::wstring link = (LPCWSTR)lParam; 
+				if (link == L"#v1")
+				{
+					ShellExecute(0, L"open", p->pst->folder.c_str(), 0, 0, SW_SHOW);
+					return S_FALSE;
+				}
+				if (link == L"#v2")
+				{
+					if (FAILED(CopUpdate(hwnd, 2)))
+						return S_FALSE;
+					Reshow = 1;
+					SendMessage(hwnd, TDM_CLICK_BUTTON, IDCANCEL, 0);
+					return S_OK;
+
+				}
 				ShellExecute(0, L"open", (const wchar_t*)lParam, 0, 0, SW_SHOW);
 				return S_FALSE;
 			}
 			if (msg == TDN_BUTTON_CLICKED)
 			{
 				int id = (int)wParam;
-				if (id == 104)
-				{
-					ShellExecute(0, L"open", p->pst->folder.c_str(), 0, 0, SW_SHOW);
-					return S_FALSE;
-				}
 				if (id == 103)
 				{
 					if (FAILED(CopUpdate(hwnd,p->pst->Installed ? 1 : 0)))
-						return S_FALSE;
-					Reshow = 1;
-					return S_OK;
-				}
-				if (id == 105)
-				{
-					if (FAILED(CopUpdate(hwnd, 2)))
 						return S_FALSE;
 					Reshow = 1;
 					return S_OK;

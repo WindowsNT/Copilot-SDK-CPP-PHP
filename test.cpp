@@ -147,6 +147,7 @@ HRESULT CopUpdate(HWND hh,int What)
 void TestCopilot()
 {
     auto status = COPILOT::Status(YOUR_COPILOT_FOLDER.c_str(), false);
+//	COPILOT::ShowStatus(false, YOUR_COPILOT_FOLDER.c_str(), false, 0);
     if (!status.Installed)
     {
           MessageBox(0, L"Copilot is not installed, please install it first.", 0, 0);
