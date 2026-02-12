@@ -434,10 +434,12 @@ public:
 		TASKDIALOGCONFIG tdc = {};
 		tdc.cbSize = sizeof(tdc);
 		tdc.hwndParent = hParent;
+		tdc.dwFlags = TDF_ENABLE_HYPERLINKS;
 		tdc.pszWindowTitle = L"Copilot Status";
 		tdc.pszMainInstruction = L"Copilot Status";
 		auto status = getst();
 		tdc.pszContent = status.c_str();
+		tdc.pszFooter = L"Your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> <a href=\"https://github.com/settings/models\">models</a>";
 		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
@@ -521,11 +523,16 @@ public:
 		p.pStatus = &status;
 		p.getStatus = getst;
 		tdc.lpCallbackData = (LPARAM) & p;
-		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM, LONG_PTR lpData)->HRESULT
+		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpData)->HRESULT
 		{
 			P* p = (P*)lpData;
 			if (msg == TDN_CREATED)
 			{
+				return S_FALSE;
+			}
+			if (msg == TDN_HYPERLINK_CLICKED)
+			{
+				ShellExecute(0, L"open", (const wchar_t*)lParam, 0, 0, SW_SHOW);
 				return S_FALSE;
 			}
 			if (msg == TDN_BUTTON_CLICKED)
