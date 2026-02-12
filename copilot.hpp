@@ -11,6 +11,7 @@
 #include <any>
 #include <sstream>
 
+#undef LINUX
 
 #ifndef LINUX
 #define WIN32_LEAN_AND_MEAN
@@ -442,12 +443,12 @@ public:
 		if (st.Installed)
 		{
 			if (HasInstaller)
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>.";
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>. <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 			else
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a>.";
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a>. <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 		}
 		else
-			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. ";
+			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.  <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
