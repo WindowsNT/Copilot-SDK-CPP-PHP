@@ -1,7 +1,7 @@
-# Copilot/LLama/Ollama SDK for C++
+# Copilot/LLama/Ollama SDK for C++ and PHP
 
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
-I'm already using it in [Turbo Play](https://www.turbo-play.com).
+I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://www.turbo-play.com/apps.php) and other projects.
 
 # Copilot Installation
 * Create a folder with python installed 
@@ -175,7 +175,6 @@ cp.LLama_Port = 9991;
 COPILOT cop(cp);
 ```
 
-
 # Connect to Ollama
 ```cpp
 COPILOT_PARAMETERS cp;
@@ -186,6 +185,37 @@ cp.folder = L"f:\\copilot";
 cp.model = "qwen3-coder:30b";
 COPILOT cop(cp);
 ``` 
+
+# PHP
+For running with PHP in a typical Linux PHP stack you do
+* Install python and the copilot sdk with pip as before
+* Put copilot CLI in a folder and make sure it's executable
+* Run python server: 
+```bash
+python copilotworker.py
+```
+* Change the parameters in copilotworker.py to match your installation
+```python
+PORT = 8765
+CLI_PATH = "/root/copilot"
+```
+* require "copilot.php" in your PHP code
+
+```PHP
+<?php
+require_once "copilot.php";
+$copilot = new Copilot("gpt-4.1",8765); 
+echo $copilot->send("/models");
+echo '<br><br>';
+echo $copilot->send("/state");
+echo '<br><br>';
+echo $copilot->send("/authstate");
+echo '<br><br>';
+echo $copilot->ask("What is the capital of France?");
+$copilot->kill();
+?>
+```
+
 
 # Other stuff
 * copilot_model_list() returns limited information, for full run-time description of the models from the SDK you can call std::vector<COPILOT_SDK_MODEL> ListModelsFromSDK().

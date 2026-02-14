@@ -443,12 +443,12 @@ public:
 		if (st.Installed)
 		{
 			if (HasInstaller)
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>. <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\nView <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 			else
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>. View <a href=\"#v1\">Installation Folder</a>. <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\nView <a href=\"#v1\">Installation Folder</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 		}
 		else
-			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.  <a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 		TASKDIALOG_BUTTON buttons[10] = {};
 		if (!st.Installed)
 		{
