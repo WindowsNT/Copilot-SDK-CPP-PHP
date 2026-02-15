@@ -1,7 +1,7 @@
 # Copilot/LLama/Ollama SDK for C++ and PHP
 
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
-I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://www.turbo-play.com/apps.php) and other projects.
+I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare) and other projects.
 
 # Copilot Installation
 * Create a folder with python installed 
