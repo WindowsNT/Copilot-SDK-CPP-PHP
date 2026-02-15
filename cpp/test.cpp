@@ -147,7 +147,7 @@ HRESULT CopUpdate(HWND hh,int What)
 void TestCopilot()
 {
     auto status = COPILOT::Status(YOUR_COPILOT_FOLDER.c_str(), false);
-	COPILOT::ShowStatus(false, YOUR_COPILOT_FOLDER.c_str(), false, 0);
+//	COPILOT::ShowStatus(false, YOUR_COPILOT_FOLDER.c_str(), false, 0);
     if (!status.Installed)
     {
           MessageBox(0, L"Copilot is not installed, please install it first.", 0, 0);
@@ -217,7 +217,7 @@ int main()
     dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     SetConsoleMode(hOut, dwMode);
 
-    GetFullPathName(L".\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
+    GetFullPathName(L"..\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
     GetFullPathName(L".\\365.jpg", 1000, image_path.data(), 0);
 
     //    TestOpenAI();
