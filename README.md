@@ -26,7 +26,7 @@ struct COPILOT_STATUS
 	bool Authenticated = false;
 	std::vector<COPILOT_MODEL> models;
 };
-static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false);
+static COPILOT_STATUS Status(COPILOT_PARAMETERS,bool Refresh = false);
 ```
 
 Call this method in a thread or a std::shared_future so you don't block the UI. If Installed is true and Authenticated is false, then run copilot.exe in a new console. If this method is called again and Refresh is false, it will return the cached status. 
@@ -37,6 +37,7 @@ If Refresh is true, it will refresh the status by checking the installation and 
 struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
+	std::string auth_token;
 	std::string model = "gpt-4.1";
 	std::string remote_server;
 	int LLama_Port = 0;
@@ -54,6 +55,7 @@ struct COPILOT_PARAMETERS
 ```
 Where
  - folder: folder where copilot.exe and python are located, or llama-server for local LLama models
+ - auth_token: An optional github token 
  - model: model name, for Copilot use "gpt-4.1" or other supported models (copilot_model_list()) , for local LLama use the model name loaded in llama-server, for Ollama use the model name available in Ollama
  - remote_server: For LLama use "localhost"
  - LLama_Port: For LLama use the port where llama-server is running

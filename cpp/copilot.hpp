@@ -193,6 +193,7 @@ struct COPILOT_SDK_MODEL
 struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
+	std::string auth_token;
 	std::string model = "gpt-4.1";
 	std::string remote_server;
 	int LLama_Port = 0;
@@ -388,14 +389,12 @@ public:
 	}
 
 #pragma comment(lib,"Comctl32.lib")
-	static void ShowStatus(bool HasInstaller,const wchar_t* folder,bool Refresh = false,HWND hParent = 0)
+	static void ShowStatus(bool HasInstaller,COPILOT_PARAMETERS cp,bool Refresh = false,HWND hParent = 0)
 	{
 		auto def_folder = COPILOT::GetDefaultCopilotfolder();
-		if (!folder)
-			folder = def_folder.c_str();
-		if (!wcslen(folder))
-			folder = def_folder.c_str();
-		auto st = Status(folder, Refresh);
+		if (!cp.folder.length())
+			cp.folder = def_folder.c_str();
+		auto st = Status(cp, Refresh);
 		static bool Reshow = false;
 		auto getst = [&]() -> std::wstring
 			{
@@ -514,12 +513,12 @@ public:
 		struct P
 		{
 			COPILOT_STATUS* pst = 0;
-			std::wstring folder;
+			COPILOT_PARAMETERS* cp = 0;
 			std::wstring* pStatus;
 			std::function<std::wstring()> getStatus;
 		};
 		P p;
-		p.folder = folder;
+		p.cp = &cp;
 		p.pst = &st;
 		p.pStatus = &status;
 		p.getStatus = getst;
@@ -563,14 +562,14 @@ public:
 				}
 				if (id == 102)
 				{
-					PushPopDirX pp(p->folder.c_str());
-					auto cop_exe = std::wstring(p->pst->folder) + L"\\copilot.exe";
+					PushPopDirX pp(p->cp->folder.c_str());
+					auto cop_exe = std::wstring(p->cp->folder) + L"\\copilot.exe";
 					COPILOT::Run(cop_exe.c_str(), false, CREATE_NEW_CONSOLE);
 					return S_FALSE;
 				}
 				if (id == 101)
 				{
-					*p->pst = COPILOT::Status(p->folder.c_str(), true);
+					*p->pst = COPILOT::Status(*p->cp, true);
 					*p->pStatus = p->getStatus();
 					SendMessage(hwnd, TDM_SET_ELEMENT_TEXT, TDE_CONTENT, (LPARAM)p->pStatus->c_str());
 					return S_FALSE;
@@ -587,31 +586,29 @@ public:
 			if (!Reshow)
 				break;
 			Reshow = 0;
-			ShowStatus(HasInstaller,folder, true, hParent);
+			ShowStatus(HasInstaller,*p.cp, true, hParent);
 			break;
 		}
 	}
 
-	static COPILOT_STATUS Status(const wchar_t* folder,bool Refresh = false)
+	static COPILOT_STATUS Status(COPILOT_PARAMETERS cp,bool Refresh = false)
 	{
 		static COPILOT_STATUS s;
 		if (Refresh)
 			s.StatusValid = 0;
-		if (s.StatusValid && s.folder == folder)
+		if (s.StatusValid && s.folder == cp.folder)
 			return s;
 
 		s.StatusValid = true;
 		wchar_t path[1000] = {};
-		swprintf_s(path, 1000, L"%s\\copilot.exe", folder);
+		swprintf_s(path, 1000, L"%s\\copilot.exe", cp.folder.c_str());
 		if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES)
 		{
 			s.Installed = false;
 			return s;
 		}
-		s.folder = folder;
+		s.folder = cp.folder;
 
-		COPILOT_PARAMETERS cp;
-		cp.folder = folder;
 		s.Installed = true;
 		s.NeedUpdate = std::async([]() -> HRESULT
 			{
@@ -1310,6 +1307,8 @@ public:
 						{
 							COPILOT* pThis = (COPILOT*)lp;
 							std::lock_guard<std::recursive_mutex> lock(pThis->promptMutex);
+							if (!pThis->Answers[key])
+								pThis->Answers[key] = std::make_shared<COPILOT_ANSWER>();
 							if (End)
 							{
 								SetEvent(pThis->Answers[key]->hEvent);
@@ -1542,7 +1541,10 @@ async def main():
 %s
 
     session = await client.create_session(session_config)
-    print("Model: ", session_config['model'])
+    print("\033[33mModel: ", session_config['model'],"\033[0m")
+    # if there is a system message, print it
+    if 'system_message' in session_config and session_config['system_message']:
+        print("\033[33mSystem: ", session_config['system_message'],"\033[0m")
 
     def ring_write_final(payload: bytes):
         buf = shm_out.buf
@@ -1716,11 +1718,25 @@ asyncio.run(main())
 		wchar_t clsid_buf[100] = {};
 		StringFromGUID2(clsid, clsid_buf, 100);
 
-		std::string cli = "client = CopilotClient()";
+		std::string cli = "client = CopilotClient({";
+		bool Added = 0;
 		if (cp.remote_server.length() > 0)
 		{
-			cli = R"(client = CopilotClient({  "cli_url": ")" + cp.remote_server + R"(" }))";
+			cli += R"("cli_url": ")";
+			cli += cp.remote_server;
+			cli += R"(")";
+			Added = 1;
 		}
+		if (cp.auth_token.length() > 0)		
+		{
+			if (Added)
+				cli += ",";
+			cli += R"("github_token": ")";
+			cli += cp.auth_token;
+			cli += R"(")";
+			Added = 1;
+		}
+		cli += "})";
 
 
 		std::string dll_entries;

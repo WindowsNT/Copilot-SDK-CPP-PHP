@@ -146,8 +146,13 @@ HRESULT CopUpdate(HWND hh,int What)
 
 void TestCopilot()
 {
-    auto status = COPILOT::Status(YOUR_COPILOT_FOLDER.c_str(), false);
-//	COPILOT::ShowStatus(false, YOUR_COPILOT_FOLDER.c_str(), false, 0);
+	COPILOT_PARAMETERS cp;
+	cp.folder = YOUR_COPILOT_FOLDER;
+    cp.model = "gpt-5-mini";
+    cp.model = "gpt-4.1";
+
+    auto status = COPILOT::Status(cp, false);
+	COPILOT::ShowStatus(false, cp, false, 0);
     if (!status.Installed)
     {
           MessageBox(0, L"Copilot is not installed, please install it first.", 0, 0);
@@ -167,10 +172,6 @@ void TestCopilot()
             return;
         }
     }
-	COPILOT_PARAMETERS cp;
-	cp.folder = YOUR_COPILOT_FOLDER;
-    cp.model = "gpt-5-mini";
-//    cp.model = "gpt-4.1";
 
 	cp.system_message = "You are a helpful assistant that can answer questions and execute tools.";
     COPILOT cop(cp);
@@ -187,7 +188,7 @@ void TestCopilot()
     reply = cop.State();
     AskQuestion(cop,true,true,false);
     cop.EndInteractive();
-	cop.ShowStatus(false,YOUR_COPILOT_FOLDER.c_str(),false,0);
+	cop.ShowStatus(false,cp,false,0);
 }
 
 
