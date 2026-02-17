@@ -196,11 +196,10 @@ void TestOllama()
 {
 	auto model_list = COPILOT::ollama_list();
     COPILOT_PARAMETERS cp;
-//    cp.custon_provider_type = "openai";    
-//    cp.custom_provider_base_url = "http://localhost:11434/v1";
+    cp.custon_provider_type = "openai";    
+    cp.custom_provider_base_url = "http://localhost:11434/v1";
     cp.folder = YOUR_COPILOT_FOLDER;
-    cp.model = "qwen3-coder:30b";
-//    cp.model = "deepseek-r1:8b";
+    cp.model = "deepseek-r1:8b";
     COPILOT cop(cp);
     cop.BeginInteractive();
     AskQuestion(cop);
