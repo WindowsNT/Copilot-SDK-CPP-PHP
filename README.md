@@ -224,5 +224,21 @@ $copilot->kill();
 * You can call Ping() to return "pong" to check if the connection with the SDK is working.
 * You can call State() to get a state string (e.g. "connected").
 * You can call AuthState() to get a "true" or "false".
+
+# CopilotChat
+CopilotChat binary is a test command line app that you can use to test the SDK.
+Command line parameters:
+* -f <folder> : folder where copilot.exe and python are located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
+* -m <model> : model name,  default is "gpt-5 mini"
+* --token <token> : A github token to use. If not used, the default copilot authentication is used.
+
+Once CopilotChat is running, you can use the commands:
+* /install                  : Installs Copilot if not installed
+* /auth                     : Runs copilot.exe for authentication if needed
+* /models                   : Lists the available models
+* /model <model_name>       : Changes the model to use
+* /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
+* /quit or /exit            : Exits the application
+ 
 # License
 MIT
