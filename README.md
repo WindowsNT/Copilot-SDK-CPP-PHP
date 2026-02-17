@@ -233,7 +233,7 @@ Command line parameters:
 * --token <token> : A github token to use. If not used, the default copilot authentication is used.
 
 Once CopilotChat is running, you can use the commands:
-* /install                  : Installs Copilot if not installed
+* /install or /update       : Installs or updates Copilot. This downloads binaries available in www.turbo-play.com and runs pip to install prerequisites. 
 * /auth                     : Runs copilot.exe for authentication if needed
 * /models                   : Lists the available models
 * /model <model_name>       : Changes the model to use
