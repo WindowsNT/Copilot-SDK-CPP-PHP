@@ -180,9 +180,8 @@ COPILOT cop(cp);
 # Connect to Ollama
 ```cpp
 COPILOT_PARAMETERS cp;
-// You do not need the following if ollama is running to the default 11434 port
-// cp.custon_provider_type = "openai";    
-// cp.custom_provider_base_url = "http://localhost:11434/v1";
+cp.custon_provider_type = "openai";    
+cp.custom_provider_base_url = "http://localhost:11434/v1";
 cp.folder = L"f:\\copilot";
 cp.model = "qwen3-coder:30b";
 COPILOT cop(cp);
