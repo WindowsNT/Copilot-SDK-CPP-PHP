@@ -197,20 +197,463 @@ struct COPILOT_PARAMETERS
 	std::string model = "gpt-4.1";
 	std::string remote_server;
 	int LLama_Port = 0;
+	bool Ollama = false;
 	std::wstring api_key;
 	std::string reasoning_effort = "";
 	std::string system_message = "";
 	std::string custon_provider_type; // example  openai for ollama
 	std::string custom_provider_base_url; //  "http://localhost:11434/v1"; for Ollama
 #ifdef _DEBUG
-	bool Debug = 1;
+	int Debug = 1;
 #else
-	bool Debug = 0;
+	int Debug = 0;
 #endif
 };
 
 class COPILOT
 {
+
+	const char* py_direct = R"(
+import asyncio
+import struct
+import json
+import httpx
+import win32event
+from multiprocessing.shared_memory import SharedMemory
+
+
+OLLAMA_BASE_URL = "%s"
+MODEL = "%s"  # 
+
+SHM_IN_NAME  = "shm_in_%S"
+SHM_OUT_NAME = "shm_out_%S"
+EV_IN_NAME     = "ev_in_%S"
+EV_OUT_NAME    = "ev_out_%S"
+EV_CANCEL_NAME = "ev_cancel_%S"
+
+SHM_SIZE = 1024 * 1024
+
+
+# ---------------------------------------------------------------------------
+# Ring-buffer helpers (ιδια λογικη με το copilot script)
+# ---------------------------------------------------------------------------
+
+def ring_write_final(buf, payload: bytes) -> bool:
+    w        = struct.unpack_from("<I", buf, 0)[0]
+    r        = struct.unpack_from("<I", buf, 4)[0]
+    capacity = struct.unpack_from("<I", buf, 8)[0]
+    data_off = 12
+    msg_len  = 4 + len(payload)
+
+    free = (capacity - (w - r)) if w >= r else (r - w)
+    if free <= msg_len:
+        return False  # buffer full, drop
+
+    pos = data_off + w
+    struct.pack_into("<I", buf, pos, len(payload))
+    pos += 4
+    end = min(len(payload), capacity - (w + 4))
+    buf[pos:pos + end] = payload[:end]
+    if end < len(payload):
+        buf[data_off:data_off + (len(payload) - end)] = payload[end:]
+
+    struct.pack_into("<I", buf, 0, (w + msg_len) %% capacity)
+    return True
+
+
+def ring_write_status(buf, payload: bytes, status: int) -> bool:
+    return ring_write_final(buf, bytes([status]) + payload)
+
+
+def ring_write(buf, payload: bytes) -> bool:
+    return ring_write_status(buf, payload, 1)          # status 1 = content delta
+
+
+def ring_write_end(buf) -> bool:
+    return ring_write_status(buf, b"--end--", 2)       # status 2 = end
+
+
+def ring_write_reasoning(buf, payload: bytes) -> bool:
+    return ring_write_status(buf, payload, 3)          # status 3 = reasoning delta
+
+
+# ---------------------------------------------------------------------------
+# Ollama streaming chat  (OpenAI-compatible endpoint)
+# ---------------------------------------------------------------------------
+
+async def chat_stream(messages: list, ev_cancel, buf, ev_out):
+    url = f"{OLLAMA_BASE_URL}/chat/completions"
+    body = {
+        "model": MODEL,
+        "messages": messages,
+        "stream": True,
+    }
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer ollama",   # το Ollama το αγνοει αλλα μερικες φορες το θελει
+    }
+
+    cancelled = False
+    print("\033[0m", end="", flush=True)
+    # print("URL:", url)
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream("POST", url, json=body, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.strip() or line.strip() == "data: [DONE]":
+                    continue
+                # OpenAI format: "data: {...}"
+                if line.startswith("data: "):
+                    line = line[6:]
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+                delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                if delta:
+                    print(delta, end="", flush=True)
+                    payload = delta.encode("utf-8")
+                    ring_write(buf, payload)
+                    win32event.SetEvent(ev_out)
+
+                if win32event.WaitForSingleObject(ev_cancel, 0) == win32event.WAIT_OBJECT_0:
+                    cancelled = True
+                    break
+
+    print("")
+    return cancelled
+
+
+# ---------------------------------------------------------------------------
+# Main loop
+# ---------------------------------------------------------------------------
+
+async def main():
+    shm_in  = SharedMemory(name=SHM_IN_NAME,  create=True, size=SHM_SIZE)
+    shm_out = SharedMemory(name=SHM_OUT_NAME, create=True, size=SHM_SIZE)
+
+    ev_in     = win32event.CreateEvent(None, 0, 0, EV_IN_NAME)
+    ev_out    = win32event.CreateEvent(None, 0, 0, EV_OUT_NAME)
+    ev_cancel = win32event.CreateEvent(None, 0, 0, EV_CANCEL_NAME)
+
+    # αρχικοποιηση ring buffer header
+    buf_out = shm_out.buf
+    struct.pack_into("<I", buf_out, 0, 0)           # write_index
+    struct.pack_into("<I", buf_out, 4, 0)           # read_index
+    struct.pack_into("<I", buf_out, 8, SHM_SIZE)    # capacity
+
+    print(f"\033[33mOllama client ready — model: {MODEL}  url: {OLLAMA_BASE_URL}\033[0m")
+
+    conversation: list = []   # ιστορικο μηνυματων
+    loop = asyncio.get_running_loop()
+
+    while True:
+        # αναμονη για εισοδο
+        await loop.run_in_executor(
+            None,
+            win32event.WaitForSingleObject,
+            ev_in,
+            win32event.INFINITE,
+        )
+
+        buf_in = shm_in.buf
+        size = struct.unpack_from("<I", buf_in, 0)[0]
+        if size == 0 or size > len(buf_in) - 4:
+            continue
+
+        payload    = bytes(buf_in[4:4 + size])
+        user_input = payload.decode("utf-8").rstrip("\r\n")
+
+        # --- εντολες συστηματος ---
+        if user_input in ("/exit", "/quit"):
+            print(f"\033[91m{user_input}\033[0m")
+            print("Exiting.")
+            break
+
+        if user_input == "/ping":
+            print(f"\033[91m{user_input}\033[0m")
+            try:
+                async with httpx.AsyncClient(timeout=5) as c:
+                    r = await c.get(f"{OLLAMA_BASE_URL}/api/tags")
+                    r.raise_for_status()
+                response_text = "pong"
+            except Exception as e:
+                response_text = f"error: {e}"
+            ring_write(buf_out, response_text.encode("utf-8"))
+            ring_write_end(buf_out)
+            win32event.SetEvent(ev_out)
+            continue
+
+        if user_input == "/models":
+            print(f"\033[91m{user_input}\033[0m")
+            try:
+                async with httpx.AsyncClient(timeout=5) as c:
+                    r = await c.get(f"{OLLAMA_BASE_URL}/api/tags")
+                    r.raise_for_status()
+                    models = r.json().get("models", [])
+                response_text = json.dumps(models, indent=2, ensure_ascii=False)
+            except Exception as e:
+                response_text = f"error: {e}"
+            ring_write(buf_out, response_text.encode("utf-8"))
+            ring_write_end(buf_out)
+            win32event.SetEvent(ev_out)
+            continue
+
+        if user_input == "/reset":
+            print(f"\033[91m{user_input}\033[0m")
+            conversation.clear()
+            ring_write(buf_out, b"conversation reset")
+            ring_write_end(buf_out)
+            win32event.SetEvent(ev_out)
+            continue
+
+        # --- κανονικο μηνυμα ---
+        print(f"\033[92m{user_input}\033[0m")
+
+        # υποστηριξη direct JSON (ιδιο με copilot script)
+        try:
+            parsed = json.loads(user_input)
+            if isinstance(parsed, dict) and "role" in parsed and "content" in parsed:
+                # εισαγωγη raw μηνυματος στο ιστορικο
+                conversation.append(parsed)
+            else:
+                conversation.append({"role": "user", "content": user_input})
+        except (json.JSONDecodeError, ValueError):
+            conversation.append({"role": "user", "content": user_input})
+
+        cancelled = await chat_stream(conversation, ev_cancel, buf_out, ev_out)
+
+        if not cancelled:
+            # προσθεσε την απαντηση του assistant στο ιστορικο
+            # (δεν εχουμε το πληρες περιεχομενο εδω — απλοποιημενη λυση)
+            pass
+
+        ring_write_end(buf_out)
+        win32event.SetEvent(ev_out)
+
+    shm_in.close()
+    shm_out.close()
+    shm_in.unlink()
+    shm_out.unlink()
+
+
+asyncio.run(main())
+)";
+
+	const char* py = R"(
+import pdb
+import asyncio
+import random
+import sys
+import struct
+import os
+import time
+import ctypes
+import win32event
+import json
+from dataclasses import asdict
+from multiprocessing.shared_memory import SharedMemory
+from copilot import CopilotClient
+from copilot.tools import define_tool
+from copilot.generated.session_events import SessionEventType
+from pydantic import BaseModel, Field
+
+%s
+
+def is_json_direct(myjson,key):
+    try:
+        buf2 = json.loads(myjson)
+        buf = buf2[key]
+    except ValueError as e:
+        return False
+    except KeyError as e:
+        return False
+    return True
+
+async def main():
+    %s
+    shm_in = SharedMemory(name="shm_in_%S", create=True, size=1024*1024)
+    shm_out = SharedMemory(name="shm_out_%S", create=True, size=1024*1024)
+    ev_in = win32event.CreateEvent(None, 0, 0, "ev_in_%S")
+    ev_out = win32event.CreateEvent(None, 0, 0, "ev_out_%S")
+    ev_cancel = win32event.CreateEvent(None, 0, 0, "ev_cancel_%S")
+    buf = shm_out.buf
+    struct.pack_into("<I", buf, 0, 0)         # write_index
+    struct.pack_into("<I", buf, 4, 0)         # read_index
+    struct.pack_into("<I", buf, 8, 1024*1024)  # capacity
+    await client.start()
+
+%s
+
+    session = await client.create_session(session_config)
+    print("\033[33mModel: ", session_config['model'],"\033[0m")
+    # if there is a system message, print it
+    if 'system_message' in session_config and session_config['system_message']:
+        print("\033[33mSystem: ", session_config['system_message'],"\033[0m")
+
+    def ring_write_final(payload: bytes):
+        buf = shm_out.buf
+        w = struct.unpack_from("<I", buf, 0)[0]
+        r = struct.unpack_from("<I", buf, 4)[0]
+	    
+        capacity = struct.unpack_from("<I", buf, 8)[0]
+        data_off = 12
+	    
+        msg_len = 4 + len(payload)
+	    
+        # free space
+        if w >= r:
+            free = capacity - (w - r)
+        else:
+            free = r - w
+	    
+        if free <= msg_len:
+            # FULL drop
+            return False
+	    
+        pos = data_off + w;
+        # write size
+        struct.pack_into("<I", buf, pos, len(payload))
+        pos += 4	
+        # payload (wrap safe)
+        end = min(len(payload), capacity - (w + 4))
+        buf[pos:pos+end] = payload[:end]
+        if end < len(payload):
+            buf[data_off:data_off+(len(payload)-end)] = payload[end:]
+	    
+        # advance write
+        struct.pack_into("<I", buf, 0, (w + msg_len) %% capacity)
+        return True
+
+    def ring_write_status(payload: bytes, status: int):
+        # first byte of payload is status
+        payload = bytes([status]) + payload
+        return ring_write_final(payload)
+
+    def ring_write(payload: bytes):
+        return ring_write_status(payload,1)
+
+    start_reasoning = 0
+    def handle_event(event):
+        nonlocal start_reasoning
+        if event.type == SessionEventType.ASSISTANT_REASONING:
+            if (start_reasoning == 1):
+                print("\033[0m")
+                start_reasoning = 0
+        if event.type == SessionEventType.ASSISTANT_REASONING_DELTA:
+            payload = event.data.delta_content.encode("utf-8")
+            if (start_reasoning == 0):
+                print("\033[35m",end='')
+                start_reasoning = 1
+            print(event.data.delta_content,end='')
+            ring_write_status(payload,3)
+            # if ev_cancel is set, stop
+            wait = win32event.WaitForSingleObject(ev_cancel, 0)
+            if wait == win32event.WAIT_OBJECT_0:
+                asyncio.get_running_loop().create_task(session.abort())
+            win32event.SetEvent(ev_out)
+        if event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
+            if (start_reasoning == 1):
+                print("\033[0m")
+                start_reasoning = 0
+            payload = event.data.delta_content.encode("utf-8")
+            # print it
+            print(event.data.delta_content, end='', flush=True)
+            ring_write(payload)
+            # if ev_cancel is set, stop
+            wait = win32event.WaitForSingleObject(ev_cancel, 0)
+            if wait == win32event.WAIT_OBJECT_0:
+                asyncio.get_running_loop().create_task(session.abort())
+            # set event
+            win32event.SetEvent(ev_out)
+
+    session.on(handle_event)
+
+    loop = asyncio.get_running_loop()
+    while True:
+        await loop.run_in_executor(
+            None,
+            win32event.WaitForSingleObject,
+            ev_in,
+            win32event.INFINITE
+            )
+        # first 4 bytes = size
+        buf = shm_in.buf
+        size = struct.unpack_from("<I", buf, 0)[0]
+        if size == 0 or size > len(buf) - 4:
+            continue  # corrupted / empty
+        payload = bytes(buf[4:4+size])
+        user_input = payload.decode("utf-8").rstrip("\r\n")
+        if user_input == "/exit":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            print("Exiting interactive session.")
+            break
+        if user_input == "/quit":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            print("Exiting interactive session.")
+            break
+        if user_input == "/ping":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            pong = await client.ping("")
+            ring_write(bytes(pong.message, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write_status(end_payload,2)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/authstate":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            pong = await client.get_auth_status()
+            ring_write(bytes(json.dumps(pong.isAuthenticated), 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write_status(end_payload,2)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/state":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            pong = client.get_state()
+            ring_write(bytes(pong, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write_status(end_payload,2)
+            win32event.SetEvent(ev_out)
+            continue
+        if user_input == "/models":
+            print("\033[91m",user_input,"\033[0m",sep='')
+            models = await client.list_models()
+            payload = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
+            ring_write(bytes(payload, 'utf-8'))
+            end_payload = "--end--".encode("utf-8")
+            ring_write_status(end_payload,2)
+            win32event.SetEvent(ev_out)
+            continue
+        print("\033[92m",user_input,"\033[0m",end='',sep='')
+        print('')
+        # check if user passed a direct message
+        isjd = is_json_direct(user_input,"direct")
+        if isjd:
+			# parse direct message
+             await session.send_and_wait(json.loads(user_input))
+        else:
+            await session.send_and_wait({"prompt": user_input}, timeout=None)
+        # also send --end--
+        end_payload = "--end--".encode("utf-8")
+        print("");
+        ring_write_status(end_payload,2)
+        win32event.SetEvent(ev_out)
+
+    shm_in.close()
+    shm_out.close()
+    shm_in.unlink()
+    shm_out.unlink()       
+    
+asyncio.run(main())
+
+
+
+)";
+
+
+
 	COPILOT_PARAMETERS cp;
 
 	std::wstring TempFile(const wchar_t* etx)
@@ -1322,7 +1765,7 @@ public:
 							if (pThis->Answers[key]->cb1)
 								pThis->Answers[key]->cb1(Status,pThis->toc(response.c_str()), pThis->Answers[key]->lpx);
 
-						}, (LPARAM)this);
+						}, (LPARAM)this,cp.Ollama);
 			});
 	}
 
@@ -1493,219 +1936,8 @@ asyncio.run(main())
 		return ModelsFromJ(s);
 	}
 
-	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(int Status,std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp)
+	void InteractiveCopilot(std::function<COPILOT_QUESTION(LPARAM lp)> pro,std::function<void(int Status,std::wstring, unsigned long long key,LPARAM lp,bool End)> cb,LPARAM lp,bool Ollama)
 	{	
-		const char* py = R"(
-import pdb
-import asyncio
-import random
-import sys
-import struct
-import os
-import time
-import ctypes
-import win32event
-import json
-from dataclasses import asdict
-from multiprocessing.shared_memory import SharedMemory
-from copilot import CopilotClient
-from copilot.tools import define_tool
-from copilot.generated.session_events import SessionEventType
-from pydantic import BaseModel, Field
-
-%s
-
-def is_json_direct(myjson,key):
-    try:
-        buf2 = json.loads(myjson)
-        buf = buf2[key]
-    except ValueError as e:
-        return False
-    except KeyError as e:
-        return False
-    return True
-
-async def main():
-    %s
-    shm_in = SharedMemory(name="shm_in_%S", create=True, size=1024*1024)
-    shm_out = SharedMemory(name="shm_out_%S", create=True, size=1024*1024)
-    ev_in = win32event.CreateEvent(None, 0, 0, "ev_in_%S")
-    ev_out = win32event.CreateEvent(None, 0, 0, "ev_out_%S")
-    ev_cancel = win32event.CreateEvent(None, 0, 0, "ev_cancel_%S")
-    buf = shm_out.buf
-    struct.pack_into("<I", buf, 0, 0)         # write_index
-    struct.pack_into("<I", buf, 4, 0)         # read_index
-    struct.pack_into("<I", buf, 8, 1024*1024)  # capacity
-    await client.start()
-
-%s
-
-    session = await client.create_session(session_config)
-    print("\033[33mModel: ", session_config['model'],"\033[0m")
-    # if there is a system message, print it
-    if 'system_message' in session_config and session_config['system_message']:
-        print("\033[33mSystem: ", session_config['system_message'],"\033[0m")
-
-    def ring_write_final(payload: bytes):
-        buf = shm_out.buf
-        w = struct.unpack_from("<I", buf, 0)[0]
-        r = struct.unpack_from("<I", buf, 4)[0]
-	    
-        capacity = struct.unpack_from("<I", buf, 8)[0]
-        data_off = 12
-	    
-        msg_len = 4 + len(payload)
-	    
-        # free space
-        if w >= r:
-            free = capacity - (w - r)
-        else:
-            free = r - w
-	    
-        if free <= msg_len:
-            # FULL drop
-            return False
-	    
-        pos = data_off + w;
-        # write size
-        struct.pack_into("<I", buf, pos, len(payload))
-        pos += 4	
-        # payload (wrap safe)
-        end = min(len(payload), capacity - (w + 4))
-        buf[pos:pos+end] = payload[:end]
-        if end < len(payload):
-            buf[data_off:data_off+(len(payload)-end)] = payload[end:]
-	    
-        # advance write
-        struct.pack_into("<I", buf, 0, (w + msg_len) %% capacity)
-        return True
-
-    def ring_write_status(payload: bytes, status: int):
-        # first byte of payload is status
-        payload = bytes([status]) + payload
-        return ring_write_final(payload)
-
-    def ring_write(payload: bytes):
-        return ring_write_status(payload,1)
-
-    start_reasoning = 0
-    def handle_event(event):
-        nonlocal start_reasoning
-        if event.type == SessionEventType.ASSISTANT_REASONING:
-            if (start_reasoning == 1):
-                print("\033[0m")
-                start_reasoning = 0
-        if event.type == SessionEventType.ASSISTANT_REASONING_DELTA:
-            payload = event.data.delta_content.encode("utf-8")
-            if (start_reasoning == 0):
-                print("\033[35m",end='')
-                start_reasoning = 1
-            print(event.data.delta_content,end='')
-            ring_write_status(payload,3)
-            # if ev_cancel is set, stop
-            wait = win32event.WaitForSingleObject(ev_cancel, 0)
-            if wait == win32event.WAIT_OBJECT_0:
-                asyncio.get_running_loop().create_task(session.abort())
-            win32event.SetEvent(ev_out)
-        if event.type == SessionEventType.ASSISTANT_MESSAGE_DELTA:
-            if (start_reasoning == 1):
-                print("\033[0m")
-                start_reasoning = 0
-            payload = event.data.delta_content.encode("utf-8")
-            # print it
-            print(event.data.delta_content, end='', flush=True)
-            ring_write(payload)
-            # if ev_cancel is set, stop
-            wait = win32event.WaitForSingleObject(ev_cancel, 0)
-            if wait == win32event.WAIT_OBJECT_0:
-                asyncio.get_running_loop().create_task(session.abort())
-            # set event
-            win32event.SetEvent(ev_out)
-
-    session.on(handle_event)
-
-    loop = asyncio.get_running_loop()
-    while True:
-        await loop.run_in_executor(
-            None,
-            win32event.WaitForSingleObject,
-            ev_in,
-            win32event.INFINITE
-            )
-        # first 4 bytes = size
-        buf = shm_in.buf
-        size = struct.unpack_from("<I", buf, 0)[0]
-        if size == 0 or size > len(buf) - 4:
-            continue  # corrupted / empty
-        payload = bytes(buf[4:4+size])
-        user_input = payload.decode("utf-8").rstrip("\r\n")
-        if user_input == "/exit":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            print("Exiting interactive session.")
-            break
-        if user_input == "/quit":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            print("Exiting interactive session.")
-            break
-        if user_input == "/ping":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            pong = await client.ping("")
-            ring_write(bytes(pong.message, 'utf-8'))
-            end_payload = "--end--".encode("utf-8")
-            ring_write_status(end_payload,2)
-            win32event.SetEvent(ev_out)
-            continue
-        if user_input == "/authstate":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            pong = await client.get_auth_status()
-            ring_write(bytes(json.dumps(pong.isAuthenticated), 'utf-8'))
-            end_payload = "--end--".encode("utf-8")
-            ring_write_status(end_payload,2)
-            win32event.SetEvent(ev_out)
-            continue
-        if user_input == "/state":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            pong = client.get_state()
-            ring_write(bytes(pong, 'utf-8'))
-            end_payload = "--end--".encode("utf-8")
-            ring_write_status(end_payload,2)
-            win32event.SetEvent(ev_out)
-            continue
-        if user_input == "/models":
-            print("\033[91m",user_input,"\033[0m",sep='')
-            models = await client.list_models()
-            payload = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
-            ring_write(bytes(payload, 'utf-8'))
-            end_payload = "--end--".encode("utf-8")
-            ring_write_status(end_payload,2)
-            win32event.SetEvent(ev_out)
-            continue
-        print("\033[92m",user_input,"\033[0m",end='',sep='')
-        print('')
-        # check if user passed a direct message
-        isjd = is_json_direct(user_input,"direct")
-        if isjd:
-			# parse direct message
-             await session.send_and_wait(json.loads(user_input))
-        else:
-            await session.send_and_wait({"prompt": user_input}, timeout=None)
-        # also send --end--
-        end_payload = "--end--".encode("utf-8")
-        print("");
-        ring_write_status(end_payload,2)
-        win32event.SetEvent(ev_out)
-
-    shm_in.close()
-    shm_out.close()
-    shm_in.unlink()
-    shm_out.unlink()       
-    
-asyncio.run(main())
-
-
-
-)";
-
 		PushPopDirX ppd(cp.folder.c_str());
 		auto tf = TempFile(L"py");
 #ifdef _DEBUG
@@ -1914,12 +2146,20 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 			clsid_buf, clsid_buf, clsid_buf, clsid_buf, clsid_buf,
 			config.data()
 			);
+		if (Ollama)
+		{
+			sprintf_s(data.data(), data.size(), py_direct, cp.custom_provider_base_url.c_str(), cp.model.c_str(),
+				clsid_buf, clsid_buf, clsid_buf, clsid_buf, clsid_buf
+			);
+		}
 
 		FILE* f = nullptr;
 		_wfopen_s(&f, tf.c_str(), L"wb");
 		fwrite(data.data(), 1, strlen(data.data()), f);
 		fclose(f);
 		std::wstring cmd = L"python \"" + tf + L"\"";
+		if (cp.Debug == 2)
+			cmd = L"cmd.exe /K python \"" + tf + L"\"";
 
 		hProcess = Run(cmd.c_str(), false, cp.Debug ? CREATE_NEW_CONSOLE : CREATE_NO_WINDOW);
 
@@ -1986,7 +2226,7 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 				for (auto& a : q.attachments)
 				{
 					nlohmann::json ja;
-					ja["path"] = toc(a.path.c_str());
+					ja["path"] = toc(ChangeSlash(a.path.c_str()).c_str());
 					ja["type"] = a.type;
 					attachments.push_back(ja);
 				}

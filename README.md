@@ -41,6 +41,7 @@ struct COPILOT_PARAMETERS
 	std::string model = "gpt-4.1";
 	std::string remote_server;
 	int LLama_Port = 0;
+	bool Ollama = false;
 	std::wstring api_key;
 	std::string reasoning_effort = "";
 	std::string system_message = "";
@@ -59,6 +60,7 @@ Where
  - model: model name, for Copilot use "gpt-4.1" or other supported models (copilot_model_list()) , for local LLama use the model name loaded in llama-server, for Ollama use the model name available in Ollama
  - remote_server: For LLama use "localhost"
  - LLama_Port: For LLama use the port where llama-server is running
+ - Ollama: If true, you can use a locally installed ollama that may not supported by Copilot but supports the same API. 
  - api_key: API key for Copilot or other providers
  - reasoning_effort: optional parameter for Copilot, can be "low", "medium", "high", "xhigh"
  - custon_provider_type: For Ollama, can be "openai" "azure" etc

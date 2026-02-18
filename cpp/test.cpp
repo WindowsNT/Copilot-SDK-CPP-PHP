@@ -220,7 +220,7 @@ int main()
     GetFullPathName(L"..\\x64\\Debug\\dlltool.dll", 1000, dll_path.data(), 0);
     GetFullPathName(L".\\365.jpg", 1000, image_path.data(), 0);
 
-    //    TestOpenAI();
+//    TestOpenAI();
 //    TestLLama();
       TestCopilot();
 //   TestOllama();
