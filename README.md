@@ -48,9 +48,9 @@ struct COPILOT_PARAMETERS
 	std::string custon_provider_type; 
 	std::string custom_provider_base_url; //  
 #ifdef _DEBUG
-	bool Debug = 1;
+	int Debug = 1; // 0 none, 1 shows cmd, 2 shows persistent cmd
 #else
-	bool Debug = 0;
+	int Debug = 0;
 #endif
 };
 ```
@@ -185,6 +185,7 @@ COPILOT_PARAMETERS cp;
 cp.custon_provider_type = "openai";    
 cp.custom_provider_base_url = "http://localhost:11434/v1";
 cp.folder = L"f:\\copilot";
+cp.Ollama = true; 
 cp.model = "qwen3-coder:30b";
 COPILOT cop(cp);
 ``` 
