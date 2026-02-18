@@ -236,6 +236,7 @@ Command line parameters:
 
 Once CopilotChat is running, you can use the commands:
 * /install or /update       : Installs or updates Copilot. This downloads binaries available in www.turbo-play.com and runs pip to install prerequisites. 
+* /file <file>              : Add an attachment for next prompt
 * /auth                     : Runs copilot.exe for authentication if needed
 * /models                   : Lists the available models
 * /model <model_name>       : Changes the model to use
