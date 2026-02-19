@@ -152,7 +152,6 @@ void TestCopilot()
     cp.model = "gpt-4.1";
 
     auto status = COPILOT::Status(cp, false);
-	COPILOT::ShowStatus(false, cp, false, 0);
     if (!status.Installed)
     {
           MessageBox(0, L"Copilot is not installed, please install it first.", 0, 0);
@@ -182,6 +181,9 @@ void TestCopilot()
         {"city", "str", "Name of the city to get the weather for"},
         {"date", "int", "Date to get the weather for"}
         });
+
+//	cop.AddSkillsDirectory(L"r://c");
+//	cop.AddDisabledSkill(L"windows.update");
 
     cop.BeginInteractive();
     auto reply = cop.Ping();

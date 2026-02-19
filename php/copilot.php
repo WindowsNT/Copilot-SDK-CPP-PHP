@@ -3,10 +3,12 @@
 class Copilot {
     private $proc;
     private $model;
+    private $token;
     private $fp;
 
-    public function __construct($model="gpt-4.1",$port = 8765) { 
+    public function __construct($model="gpt-4.1",$token = "",$port = 8765) { 
         $this->model = $model;
+        $this->token = $token;
           $this->fp = fsockopen("127.0.0.1",$port,$errno,$errstr,5);
           if(!$this->fp) throw new Exception($errstr);
     }
@@ -32,7 +34,7 @@ class Copilot {
     }
 
     public function ask($prompt) {
-    $msg = json_encode(["model"=> $this->model,"prompt"=>$prompt]);
+    $msg = json_encode(["model"=> $this->model,"prompt"=>$prompt,"token"=>$this->token]);
     $msg .= "\n";
     return $this->send($msg);
 }

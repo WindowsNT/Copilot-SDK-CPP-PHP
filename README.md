@@ -162,13 +162,22 @@ auto ans = cop.PushPrompt(L"Tell me the weather in Athens in 25 January 2026",tr
 This adds a tool to Copilot that calls the pcall function in the dlltool.dll. The pcall function receives a json string with the tool parameters and must return a json string with the tool results.
 Currently, it returns hardcoded "temperature": "14C", but you can modify it to call a weather API.
 
-# Image Attachments
+# Attachments
 ```cpp
  cop.PushAttachmentForNextPrompt("c://image.jpg");
 ```
 
 This pushes an image attachment for the next prompt. You can push multiple attachments before a prompt.
 The model must support attachments for this to work.
+
+
+# Skills
+```cpp
+cop.AddSkillsDirectory(L"r://c");
+cop.AddDisabledSkill(L"windows.update");
+```
+
+This allows you to define [skills](https://github.com/github/copilot-sdk/blob/main/docs/guides/skills.md).
 
 # Connect to LLama
 ```cpp

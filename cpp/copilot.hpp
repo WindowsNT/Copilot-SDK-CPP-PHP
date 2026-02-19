@@ -710,6 +710,8 @@ asyncio.run(main())
 	}
 
 	std::vector<DLL_LIST> dlls;
+	std::vector<std::wstring> SkillFolders;
+	std::vector<std::wstring> DisabledSkills;
 	HANDLE hFM = 0, hFO = 0, hEI = 0, hEO = 0, hEC = 0;
 	void* p1 = 0;
 	void* p2 = 0;
@@ -1093,6 +1095,16 @@ public:
 		
 		dlls[idll].tools.push_back(t);
 		return true;
+	}
+
+	void AddSkillsDirectory(std::wstring fol)
+	{
+		SkillFolders.push_back(ChangeSlash(fol.c_str()));
+	}
+
+	void AddDisabledSkill(std::wstring skill)
+	{
+		DisabledSkills.push_back(skill);
 	}
 
 
@@ -2066,6 +2078,36 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 		sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
         "model": "%s",
         "streaming": True,)", cp.model.c_str());
+
+		if (SkillFolders.size())
+		{
+			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+		"skill_folders": [)");
+			for (size_t i = 0; i < SkillFolders.size(); i++)
+			{
+				sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+			"%s")", toc(SkillFolders[i].c_str()).c_str());
+				if (i != SkillFolders.size() - 1)
+					sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), ",");
+			}
+			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+		],)");
+		}
+
+		if (DisabledSkills.size())
+		{
+			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+		"disabled_skills": [)");
+			for (size_t i = 0; i < DisabledSkills.size(); i++)
+			{
+				sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+			"%s")", toc(DisabledSkills[i].c_str()).c_str());
+				if (i != DisabledSkills.size() - 1)
+					sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), ",");
+			}
+			sprintf_s(config.data() + strlen(config.data()), 10000 - strlen(config.data()), R"(
+		],)");
+		}
 
 		// Dlls ask_user any
 		for (size_t i = 0; i < dlls.size(); i++)
