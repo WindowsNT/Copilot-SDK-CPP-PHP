@@ -5,6 +5,7 @@ class Copilot {
     private $model;
     private $token;
     private $fp;
+    private $next_attachments = array();
 
     public function __construct($model="gpt-4.1",$token = "",$port = 8765) { 
         $this->model = $model;
@@ -29,13 +30,28 @@ class Copilot {
             if(str_contains($out,"<<END>>"))
                 break;
             if ($chunk===false) break;
+
+            usleep(100000); // Sleep for 100ms to avoid busy waiting
         }
         return str_replace("<<END>>","",$out);
     }
 
+    public function add_attachment($path) {
+        $this->next_attachments[] = array("path" => $path,"type" => "file");
+    }
+
+    public function build_prompt($prompt)
+    {
+        $msg = json_encode(["model"=> $this->model,"prompt"=>$prompt,"token"=>$this->token,"attachments"=>$this->next_attachments]);
+        $msg .= "\n";
+        return $msg;
+    }
+
+
     public function ask($prompt) {
-    $msg = json_encode(["model"=> $this->model,"prompt"=>$prompt,"token"=>$this->token]);
+    $msg = $this->build_prompt($prompt);
     $msg .= "\n";
+    $this->next_attachments = array(); // Clear attachments after sending
     return $this->send($msg);
 }
 
