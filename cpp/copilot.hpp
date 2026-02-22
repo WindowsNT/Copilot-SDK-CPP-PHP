@@ -16,7 +16,6 @@
 #ifndef LINUX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <WS2tcpip.h>
 #include <wincrypt.h>   
 #include <ShlObj.h>
 #include <shellapi.h>
@@ -31,6 +30,8 @@
 #pragma comment(lib, "ws2_32.lib")
 #include "stdinout2.h"
 #include "rest.h"
+
+
 #else
 typedef long HRESULT;
 typedef long long LPARAM;
@@ -1132,7 +1133,9 @@ public:
 		sockaddr_in sa = { 0 };
 		sa.sin_family = AF_INET;
 		sa.sin_port = htons(11434);
-		inet_pton(AF_INET, "127.0.0.1", &sa.sin_addr);
+#pragma warning(disable:4996)
+		sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+#pragma warning(default:4996)
 		int res = connect(x, (sockaddr*)&sa, sizeof(sa));
 		closesocket(x);
 		if (res == SOCKET_ERROR)
