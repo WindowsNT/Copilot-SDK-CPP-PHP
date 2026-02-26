@@ -21,7 +21,7 @@ class Copilot {
         fclose($this->fp);
     }
 
-    public function send($msg) {
+    private function send($msg) {
         fwrite($this->fp, $msg."\n");
         $out = "";
         while(true) {
