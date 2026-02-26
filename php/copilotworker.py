@@ -69,8 +69,6 @@ async def main2(reader,writer):
         try:
             # see if prompt is a command
             line = req.get("prompt", None)
-            current_model = req.get("model", current_model)
-            current_token = req.get("token", current_token)
             # ensure its str
             line = line.encode("utf-8")
             line = line.rstrip(b"\r\n")
@@ -78,20 +76,20 @@ async def main2(reader,writer):
                 break
             if line == "/exit".encode("utf-8"):
                 break
+            model = req.get("model", current_model)
+            token = req.get("token", current_token)
+            await ensure_client(model, token)
             if line == "/state".encode("utf-8"):
-                await ensure_client(current_model, current_token)
                 payload = client.get_state()
                 writer.write(payload.encode("utf-8"))
                 writer.write(b"\n<<END>>")
                 continue
             if line == "/authstate".encode("utf-8"):
-                await ensure_client(current_model, current_token)
                 pong = await client.get_auth_status()
                 writer.write(bytes(json.dumps(pong.isAuthenticated, indent=2, ensure_ascii=False), "utf-8"))
                 writer.write(b"\n<<END>>")
                 continue
             if line == "/models".encode("utf-8"):
-                await ensure_client(current_model, current_token)
                 models = await client.list_models()
                 payload = json.dumps([asdict(m) for m in models], indent=2, ensure_ascii=False)
                 writer.write(payload.encode("utf-8"))

@@ -22,6 +22,7 @@ class Copilot {
     }
 
     private function send($msg) {
+//        echo $msg; die;
         fwrite($this->fp, $msg."\n");
         $out = "";
         while(true) {
