@@ -2243,6 +2243,8 @@ async def %s(params: tool%zi%zi_params) -> dict:)",t.desc.c_str(),t.name.c_str()
 				CloseHandle(h);
 				rawpy[read] = 0;
 			}
+			else
+				return;
 		}
 
 		sprintf_s(data.data(), data.size(), rawpy.data(), dll_entries.c_str(), cli.c_str(),
