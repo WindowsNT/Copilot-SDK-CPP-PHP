@@ -144,6 +144,13 @@ HRESULT CopUpdate(HWND hh,int What)
     return E_NOTIMPL;
 }
 
+
+
+void CopReturnedToken(std::string)
+{
+
+}
+
 void TestCopilot()
 {
 	COPILOT_PARAMETERS cp;

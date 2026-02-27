@@ -19,6 +19,7 @@
 #include <wincrypt.h>   
 #include <ShlObj.h>
 #include <shellapi.h>
+#include <wincred.h>
 #include <wininet.h>
 #include <dxgi.h>
 #include <atlbase.h>
@@ -64,6 +65,7 @@ enum class LlamaBackend
 #ifndef LINUX
 inline HRESULT OllamaRunning = S_FALSE;
 HRESULT CopUpdate(HWND,int What); // 0 Install 1 Update 2 Remove 3 Check
+void CopReturnedToken(std::string);
 #endif
 
 struct TOOL_PARAM
@@ -194,6 +196,8 @@ struct COPILOT_SDK_MODEL
 struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
+	std::string client_id;
+	std::string client_secret;
 	std::string auth_token;
 	std::string model = "gpt-4.1";
 	std::string remote_server;
@@ -821,7 +825,225 @@ public:
 		}
 
 	}
+	
+	static void ToClip(HWND hhx, const wchar_t* t, bool Empty)
+	{
+		if (OpenClipboard(hhx))
+		{
+			if (Empty)
+				EmptyClipboard();
+			HGLOBAL hGG = GlobalAlloc(GMEM_FIXED, wcslen(t) * 2 + 100);
+			void* pp = GlobalLock(hGG);
+			wcscpy_s((wchar_t*)pp, wcslen(t) + 10, t);
+			SetClipboardData(CF_UNICODETEXT, hGG);
+			GlobalUnlock(hGG);
+			CloseClipboard();
+		}
+	}
 
+
+	static bool SaveToken(const wchar_t* token,wchar_t* Target,wchar_t* Username)
+	{
+		CREDENTIAL cred = { 0 };
+		cred.Type = CRED_TYPE_GENERIC;
+		cred.TargetName = Target;
+		cred.CredentialBlobSize = (DWORD)(wcslen(token) * sizeof(wchar_t));
+		cred.CredentialBlob = (LPBYTE)token;
+		cred.Persist = CRED_PERSIST_LOCAL_MACHINE;
+		cred.UserName = Username;
+
+		return CredWrite(&cred, 0);
+	}
+
+
+	static std::wstring LoadToken(const wchar_t* Target)
+	{
+		PCREDENTIAL cred;
+		if (CredRead(Target, CRED_TYPE_GENERIC, 0, &cred))
+		{
+			auto sz = cred->CredentialBlobSize / sizeof(wchar_t);
+			std::wstring r = std::wstring((wchar_t*)cred->CredentialBlob, sz);
+			CredFree(cred);
+			return r;
+		}
+		return L"";
+	}
+
+	static bool DeleteToken(const wchar_t* Target)
+	{
+		if (CredDeleteW(Target, CRED_TYPE_GENERIC, 0))
+			return true;
+		return false;
+	}
+
+	static std::string GetAccessToken(HWND hParent,const char* client_id,const char* client_secret)
+	{
+		// 1. Request verification code POST https://github.com/login/device/code
+		RESTAPI::REST r;
+		std::wstring acc = L"Accept: application/json";
+		r.Connect(L"github.com", true);
+		std::string d2;
+		d2 += "client_id=";
+		d2 += client_id;
+		d2 += "&";
+		//	d2 += "scope=";
+		//	d2 += ""
+
+		auto r2 = r.RequestWithBuffer(L"/login/device/code", L"POST", { acc }, d2.data(), d2.length());
+		std::vector<char> d;
+		r.ReadToMemory(r2, d);
+		d.resize(d.size() + 1);
+		try
+		{
+			nlohmann::json x = nlohmann::json::parse(d.data());
+
+			struct R
+			{
+				const char* client_id;
+				const char* client_secret;
+				std::string device_code;
+				std::string user_code;
+				nlohmann::json* x;
+				std::string token;
+				bool Cancelled = false;
+				std::shared_ptr<std::thread> j;
+			};
+			R r;
+			r.client_id = client_id;
+			r.client_secret = client_secret;
+			r.x = &x;
+
+			auto verification_uri = x["verification_uri"].get<std::string>();
+			auto device_code = x["device_code"].get<std::string>();
+			auto user_code = x["user_code"].get<std::string>();
+			r.device_code = device_code;
+			r.user_code = user_code;
+			
+
+			TASKDIALOGCONFIG tdc = {};
+			tdc.cbSize = sizeof(tdc);
+			tdc.hwndParent = hParent;
+			tdc.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_CALLBACK_TIMER;
+			tdc.pszWindowTitle = L"Copilot Authentication";
+			tdc.pszMainInstruction = L"GitHub Authentication Required";
+			std::wstring str = L"Please authenticate to github by going to\r\n\r\n<a href=\"";
+			str += COPILOT::tou(verification_uri.c_str()) + L"\">";
+			str += COPILOT::tou(verification_uri.c_str());
+			str += L"</a>\r\n\r\nand use the following code:\r\n\r\n";
+			str += COPILOT::tou(user_code.c_str());
+			tdc.pszContent = str.c_str();
+			TASKDIALOG_BUTTON buttons[10] = {};
+			buttons[0].nButtonID = 100;
+			buttons[0].pszButtonText = L"Copy code to clipboard";
+			buttons[1].nButtonID = 101;
+			buttons[1].pszButtonText = L"Go to authentication URL";
+			buttons[2].nButtonID = IDCANCEL;
+			buttons[2].pszButtonText = L"Cancel";
+			tdc.cButtons = 3;
+			tdc.pButtons = buttons;
+			tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpData) -> HRESULT
+				{
+					R* x = (R*)lpData;
+					if (msg == TDN_TIMER)
+					{
+						if (x->token.length())
+						{
+							SendMessage(hwnd, TDM_CLICK_BUTTON, IDCANCEL, 0);
+							return S_OK;
+						}
+						else
+						{
+							return S_FALSE;
+						}
+					}
+					if (msg == TDN_CREATED)
+					{
+						auto thr = [](R*r)
+							{
+								try
+								{
+									for (int i = 0; i < 100; i++)
+									{
+										// POST https://github.com/login/oauth/access_token
+										RESTAPI::REST r2;
+										r2.Connect(L"github.com", true);
+										std::string d2;
+										d2 += "client_id=";
+										d2 += r->client_id;
+										d2 += "&";
+										d2 += "device_code=";
+										d2 += r->device_code;
+										d2 += "&";
+										d2 += "grant_type=urn:ietf:params:oauth:grant-type:device_code";
+
+										std::wstring acc = L"Accept: application/json";
+										auto r3 = r2.RequestWithBuffer(L"/login/oauth/access_token", L"POST", { acc }, d2.data(), d2.length());
+										std::vector<char> d;
+										r2.ReadToMemory(r3, d);
+										d.resize(d.size() + 1);
+										nlohmann::json root2 = nlohmann::json::parse(d.data());
+										// is there an "access_token" ?
+										if (root2.contains("access_token"))
+										{
+											std::string access_token = root2["access_token"].get<std::string>();
+											r->token = access_token;
+											break;
+										}
+										Sleep(8000);
+										if (r->Cancelled)
+										{
+											break;
+										}
+									}
+								}
+								catch (...)
+								{
+									r->token = " ";
+								}
+							};
+						x->j = std::make_shared<std::thread>(thr, x);
+					}
+					if (msg == TDN_HYPERLINK_CLICKED)
+					{
+						// open the link in default browser
+						ShellExecute(0, L"open", (const wchar_t*)lParam, 0, 0, SW_SHOWNORMAL);
+					}
+					if (msg == TDN_BUTTON_CLICKED)
+					{
+						if (wParam == 100)
+						{
+							std::string user_code = x->user_code;
+							std::wstring wcode = COPILOT::tou(user_code.c_str());
+							ToClip(hwnd, wcode.c_str(), true);
+							return S_FALSE;
+						}
+						if (wParam == 101)
+						{
+							std::string verification_uri = x->x->operator[]("verification_uri").get<std::string>();
+							ShellExecute(0, L"open", COPILOT::tou(verification_uri.c_str()).c_str(), 0, 0, SW_SHOWNORMAL);
+							return S_FALSE;
+						}
+						if (wParam == IDCANCEL)
+						{
+							x->Cancelled = true;
+							x->j->join();
+							return S_OK;
+						}
+					}
+					return S_FALSE;
+				};
+			tdc.lpCallbackData = (LPARAM)&r;
+			TaskDialogIndirect(&tdc, 0, 0, 0);
+
+			if (r.token.length() > 2)
+				return r.token;
+		}
+		catch (...)
+		{
+			return "";
+		}
+		return "";
+	}
 
 	COPILOT(COPILOT_PARAMETERS& cx,bool NoOllama = false)
 	{
@@ -868,7 +1090,7 @@ public:
 					for (auto& l : st.models)
 					{
 						wchar_t buf[200] = {};
-						swprintf_s(buf, 100, L"%.2f - %S\r\n", l.rate, l.fullname.c_str());
+						swprintf_s(buf, 100, L"%6.2f - %S\r\n", l.rate, l.fullname.c_str());
 						s += buf;
 					}
 				}
@@ -885,12 +1107,26 @@ public:
 		tdc.pszMainInstruction = L"Copilot Status";
 		auto status = getst();
 		tdc.pszContent = status.c_str();
+		std::wstring footer;
 		if (st.Installed)
 		{
+			footer += L"Copilot <a href=\"https://github.com/settings/copilot/features\">account</a>";
+			footer += L", <a href=\"https://github.com/settings/models\">models";
+			if (cp.client_id.length())
+			{
+				footer += L"</a>, <a href=\"https://github.com/settings/connections/applications";
+				footer += L"?client_id=" + tou(cp.client_id.c_str());
+				footer += L"\">authorized applications</a>";
+			}
+			footer += L".\r\n";
+			footer += L"View <a href=\"#v1\">Installation Folder</a>";
 			if (HasInstaller)
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\nView <a href=\"#v1\">Installation Folder</a> or <a href=\"#v2\">Remove Copilot</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+				footer += L" or <a href=\"#v2\">Remove Copilot</a>.\r\n";
 			else
-				tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\nView <a href=\"#v1\">Installation Folder</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+				footer += L".\r\n";
+
+			footer += L"<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+			tdc.pszFooter = footer.c_str();
 		}
 		else
 			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
@@ -1008,6 +1244,13 @@ public:
 				}
 				if (id == 102)
 				{
+					if (p->cp->client_id.length() && p->cp->client_secret.length())
+					{
+						auto token = GetAccessToken(hwnd, p->cp->client_id.c_str(), p->cp->client_secret.c_str());
+						void CopReturnedToken(std::string);
+						CopReturnedToken(token);
+						return S_OK;
+					}
 					PushPopDirX pp(p->cp->folder.c_str());
 					auto cop_exe = std::wstring(p->cp->folder) + L"\\copilot.exe";
 					COPILOT::Run(cop_exe.c_str(), false, CREATE_NEW_CONSOLE);

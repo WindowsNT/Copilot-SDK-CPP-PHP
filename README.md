@@ -1,7 +1,7 @@
 # Copilot/LLama/Ollama SDK for C++ and PHP
 
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
-I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare) and other projects.
+I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare), [FaustChat](https://www.turbo-play.com/copilot.php?from=FaustChat) and other projects.
 
 # Copilot Installation
 * Create a folder with python installed 
@@ -38,6 +38,8 @@ struct COPILOT_PARAMETERS
 {
 	std::wstring folder;
 	std::string auth_token;
+	std::string client_id;
+	std::string client_secret;
 	std::string model = "gpt-4.1";
 	std::string remote_server;
 	int LLama_Port = 0;
@@ -57,6 +59,8 @@ struct COPILOT_PARAMETERS
 Where
  - folder: folder where copilot.exe and python are located, or llama-server for local LLama models
  - auth_token: An optional github token 
+ - client_id/client_secret: If present, the status window will use these to authenticate instead of running copilot.exe. Once authenticated, your `void CopReturnedToken(std::string)` function will be called with the token. You can save/load/delete token 
+	 using the helpers `static bool SaveToken(const wchar_t* token,wchar_t* Target,wchar_t* Username)`, `static std::wstring LoadToken(const wchar_t* Target)` and `static bool DeleteToken(const wchar_t* Target)`.
  - model: model name, for Copilot use "gpt-4.1" or other supported models (copilot_model_list()) , for local LLama use the model name loaded in llama-server, for Ollama use the model name available in Ollama
  - remote_server: For LLama use "localhost"
  - LLama_Port: For LLama use the port where llama-server is running
@@ -235,6 +239,7 @@ $copilot->kill();
 * You can call Ping() to return "pong" to check if the connection with the SDK is working.
 * You can call State() to get a state string (e.g. "connected").
 * You can call AuthState() to get a "true" or "false".
+* You can call `static std::string GetAccessToken(HWND hParent,const char* client_id,const char* client_secret)` to get an access token using the client_id and client_secret from a popup window. 
 
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
