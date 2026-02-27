@@ -12,6 +12,7 @@ class Copilot {
         $this->token = $token;
           $this->fp = fsockopen("127.0.0.1",$port,$errno,$errstr,5);
           if(!$this->fp) throw new Exception($errstr);
+          stream_set_blocking($this->fp, false);
     }
 
 

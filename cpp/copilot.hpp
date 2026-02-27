@@ -633,7 +633,7 @@ async def main():
         isjd = is_json_direct(user_input,"direct")
         if isjd:
 			# parse direct message
-             await session.send_and_wait(json.loads(user_input))
+             await session.send_and_wait(json.loads(user_input), timeout=None)
         else:
             await session.send_and_wait({"prompt": user_input}, timeout=None)
         # also send --end--
