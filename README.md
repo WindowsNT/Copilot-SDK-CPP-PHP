@@ -5,6 +5,7 @@ I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](htt
 
 # Copilot Installation
 * Create a folder with python installed 
+* put raw.py in that folder
 * pip install github-copilot-sdk asyncio pywin32
 * Put [copilot.exe](https://github.com/github/copilot-cli/releases/) in that folder
 
