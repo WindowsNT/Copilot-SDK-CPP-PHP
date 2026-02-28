@@ -7,4 +7,5 @@
   <Project Path="cpp\test.vcxproj" Id="2bbd69d9-c846-4176-88a8-5d5701149d18">
     <BuildDependency Project="cpp\dlltool.vcxproj" />
   </Project>
+  <Project Path="rawcpp/rawcpp.vcxproj" Id="51ca99e6-08fc-4de9-8b34-2e5f370c42c0" />
 </Solution>

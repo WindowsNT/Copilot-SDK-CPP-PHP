@@ -2025,6 +2025,8 @@ asyncio.run(main())
 			cli += R"(")";
 			Added = 1;
 		}
+		// and use_stdio: False
+		//cli += R"(,"use_stdio": False, "cli_url" : "127.0.0.1:3000")";
 		cli += "})";
 
 

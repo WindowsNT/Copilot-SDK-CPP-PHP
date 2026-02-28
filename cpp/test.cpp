@@ -215,6 +215,7 @@ void TestOllama()
     cop.EndInteractive();
 }
 
+
 int main()
 {
 	WSADATA wsaData;
@@ -231,6 +232,7 @@ int main()
 
 //    TestOpenAI();
 //    TestLLama();
+//    TestRaw();
       TestCopilot();
 //   TestOllama();
 }
