@@ -43,12 +43,20 @@ BOOL WINAPI MyConsoleHandler(DWORD ctrlType)
 	return FALSE;
 }
 
-int main()
+int wmain()
 {
 #ifdef _WIN32
 	WSADATA wsaData;
 	WSAStartup(MAKEWORD(2, 2), &wsaData);
 	SetConsoleCtrlHandler(MyConsoleHandler, TRUE);
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD dwMode = 0;
+	GetConsoleMode(hOut, &dwMode);
+	dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	SetConsoleMode(hOut, dwMode);
+	SetConsoleCP(CP_UTF8);
+	SetConsoleOutputCP(CP_UTF8);
+
 #endif
 	COPILOT_RAW raw("127.0.0.1", 3000, true);
 //	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token");

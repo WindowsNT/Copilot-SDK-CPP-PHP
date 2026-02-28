@@ -23,9 +23,9 @@ struct SESSION
 	std::string cwd;
 	std::string title;
 	std::string updatedAt;
-	std::shared_ptr<COMPLETED_MESSAGE> completed_messsage;
+	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
 	std::vector<std::shared_ptr<MESSAGE>> reasoning_messages;
-	std::vector<std::shared_ptr<MESSAGE>> final_messages;
+	std::vector<std::shared_ptr<MESSAGE>> output_messages;
 };
 
 class COPILOT_RAW
@@ -180,23 +180,6 @@ class COPILOT_RAW
 							if (r["params"].contains("sessionId"))
 								sessionId = r["params"]["sessionId"].get<std::string>();
 							std::string evtype = r["params"]["event"]["type"].get<std::string>();
-							if (evtype == "assistant.reasoning")
-							{
-								bool F = 0;
-								for (auto& s : all_sessions)
-								{
-									if (s->sessionId == sessionId)
-									{
-										if (!s->completed_messsage)
-											s->completed_messsage = std::make_shared<COMPLETED_MESSAGE>();
-										s->completed_messsage->reasoningText = data["content"].get<std::string>();
-										F = 1;
-										break;
-									}
-								}
-								if (F)
-									continue;
-							}
 							if (evtype == "assistant.reasoning_delta")
 							{
 								bool F = 0;
@@ -223,7 +206,7 @@ class COPILOT_RAW
 									{
 										auto m = std::make_shared<MESSAGE>();
 										m->content = data["deltaContent"].get<std::string>();
-										s->final_messages.push_back(m);
+										s->output_messages.push_back(m);
 										F = 1;
 										break;
 									}
@@ -238,11 +221,11 @@ class COPILOT_RAW
 								{
 									if (s->sessionId == sessionId)
 									{
-										if (!s->completed_messsage)
-											s->completed_messsage = std::make_shared<COMPLETED_MESSAGE>();
-										s->completed_messsage->content = data["content"].get<std::string>();
-										s->completed_messsage->messageId = data["messageId"].get<std::string>();
-										s->completed_messsage->reasoningText = data["reasoningText"].get<std::string>();
+										if (!s->completed_message)
+											s->completed_message = std::make_shared<COMPLETED_MESSAGE>();
+										s->completed_message->content = data["content"].get<std::string>();
+										s->completed_message->messageId = data["messageId"].get<std::string>();
+										s->completed_message->reasoningText = data["reasoningText"].get<std::string>();
 										F = 1;
 										break;
 									}
@@ -411,6 +394,27 @@ nlohmann::json AuthStatus()
 		ret(j,false);
 	}
 
+
+	int Wait(std::shared_ptr<SESSION> s,int WaitMs = 0)
+	{
+		if (!s)
+			return -2;
+		int waited = 0;
+		for (;;)
+		{
+			if (1)
+			{
+				std::lock_guard<std::recursive_mutex> lock(response_mutex);
+				if (s->completed_message)
+					return 0;
+			}
+			Sleep(100);
+			waited += 100;
+			if (WaitMs > 0 && waited >= WaitMs)
+				return -1;
+		}
+	}
+
 	void Send(std::shared_ptr<SESSION> s, const char* message,int WaitMs = 0,std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr,long long ptr = 0)
 	{
 		if (!s)
@@ -424,9 +428,9 @@ nlohmann::json AuthStatus()
 			std::lock_guard<std::recursive_mutex> lock(response_mutex);
 			responses.clear();
 		}
-		s->completed_messsage = nullptr;
+		s->completed_message = nullptr;
 		s->reasoning_messages.clear();
-		s->final_messages.clear();
+		s->output_messages.clear();
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
@@ -443,7 +447,7 @@ nlohmann::json AuthStatus()
 				Sleep(100);
 				waited += 100;
 				std::lock_guard<std::recursive_mutex> lock(response_mutex);
-				if (s->completed_messsage)
+				if (s->completed_message)
 					break;
 
 
@@ -495,11 +499,11 @@ nlohmann::json AuthStatus()
 							Abort(s);
 					}
 				}
-				for (size_t im = 0; im < s->final_messages.size(); im++)
+				for (size_t im = 0; im < s->output_messages.size(); im++)
 				{
 					if (!messaging_callback)
 						break;
-					auto rm = s->final_messages[im];
+					auto rm = s->output_messages[im];
 					if (rm)
 					{
 						if (rm->Ack == 1)
