@@ -846,12 +846,12 @@ public:
 	}
 
 #pragma comment(lib,"Comctl32.lib")
-	static void ShowStatus(bool HasInstaller,COPILOT_PARAMETERS cp,bool Refresh = false,HWND hParent = 0)
+	static void ShowStatus(bool HasInstaller,COPILOT_PARAMETERS cp,bool Refresh = false,HWND hParent = 0,COPILOT_STATUS* u = 0,bool Raw = 0)
 	{
 		auto def_folder = COPILOT::GetDefaultCopilotfolder();
 		if (!cp.folder.length())
 			cp.folder = def_folder.c_str();
-		auto st = Status(cp, Refresh);
+		auto st = u ? *u : Status(cp, Refresh);
 		static bool Reshow = false;
 		auto getst = [&]() -> std::wstring
 			{
@@ -908,11 +908,14 @@ public:
 				footer += L"\">authorized applications</a>";
 			}
 			footer += L".\r\n";
-			footer += L"View <a href=\"#v1\">Installation Folder</a>";
-			if (HasInstaller)
-				footer += L" or <a href=\"#v2\">Remove Copilot</a>.\r\n";
-			else
-				footer += L".\r\n";
+			if (!Raw)
+			{
+				footer += L"View <a href=\"#v1\">Installation Folder</a>";
+				if (HasInstaller)
+					footer += L" or <a href=\"#v2\">Remove Copilot</a>.\r\n";
+				else
+					footer += L".\r\n";
+			}
 
 			footer += L"<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
 			tdc.pszFooter = footer.c_str();
@@ -954,17 +957,20 @@ public:
 						ni++;
 					}
 				}
-				buttons[ni].pszButtonText = L"Run CLI";
-				buttons[ni].nButtonID = 112;
 				if (!st.Authenticated)
 				{
+//					buttons[ni].pszButtonText = L"Run CLI";
+//					buttons[ni].nButtonID = 112;
 					buttons[ni].pszButtonText = L"Authenticate";
 					buttons[ni].nButtonID = 102;
+					ni++;
 				}
-				ni++;
-				buttons[ni].pszButtonText = L"Refresh";
-				buttons[ni].nButtonID = 101;
-				ni++;
+				if (!Raw)
+				{
+					buttons[ni].pszButtonText = L"Refresh";
+					buttons[ni].nButtonID = 101;
+					ni++;
+				}
 				buttons[ni].pszButtonText = L"Close";
 				buttons[ni].nButtonID = IDCANCEL;
 				tdc.pButtons = buttons;
@@ -972,16 +978,23 @@ public:
 			}
 			else
 			{
-				buttons[0].pszButtonText = L"Run CLI";
+				int ni = 0;
 				if (!st.Authenticated)
-					buttons[0].pszButtonText = L"Authenticate";
-				buttons[0].nButtonID = 102;
-				buttons[1].pszButtonText = L"Refresh";
-				buttons[1].nButtonID = 101;
-				buttons[2].pszButtonText = L"Close";
-				buttons[2].nButtonID = IDCANCEL;
+				{
+					buttons[ni].pszButtonText = L"Authenticate";
+					buttons[ni].nButtonID = 102;
+					ni++;
+				}
+				if (!Raw)
+				{
+					buttons[ni].pszButtonText = L"Refresh";
+					buttons[ni].nButtonID = 101;
+					ni++;
+				}
+				buttons[ni].pszButtonText = L"Close";
+				buttons[ni].nButtonID = IDCANCEL;
 				tdc.pButtons = buttons;
-				tdc.cButtons = 3;
+				tdc.cButtons = ni + 1;
 			}
 		}
 		struct P

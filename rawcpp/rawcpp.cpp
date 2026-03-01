@@ -68,9 +68,11 @@ int wmain()
 	auto dup = as.dump();
 	auto ml = raw.ModelList();
 	dup = ml.dump();
-//	auto s1 = raw.CreateSession("gpt-4.1", true);
-	auto s1 = raw.CreateSession("gpt-5-mini", false);
-	auto m1 = raw.CreateMessage(s1, "Hello", 0);
+	auto s1 = raw.CreateSession("gpt-4.1", true);
+//	auto s1 = raw.CreateSession("gpt-5-mini", false);
+//	auto m1 = raw.CreateMessage(s1, "Hello", 0);
+	std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
+	auto m1 = raw.CreateMessage(s1, "What do you see in this image?", 0, 0, 0, &files);
 	auto m2 = raw.CreateMessage(s1, "Please tell me all numbers from 1 to 100", [&](std::string tok, long long ptr) -> HRESULT {
 		std::cout << tok;
 		if (brk)

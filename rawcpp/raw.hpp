@@ -20,6 +20,7 @@ struct MESSAGE
 struct PENDING_MESSAGE
 {
 	std::string m;
+	std::vector<std::wstring> attachments;
 	std::string id;
 	std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr;
 	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
@@ -524,10 +525,12 @@ nlohmann::json AuthStatus()
 		}
 	}
 
-	std::shared_ptr<PENDING_MESSAGE> CreateMessage(std::shared_ptr<COPILOT_SESSION> s, const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0)
+	std::shared_ptr<PENDING_MESSAGE> CreateMessage(std::shared_ptr<COPILOT_SESSION> s, const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0,std::vector<std::wstring>* atts = 0)
 	{
 		auto pm = std::make_shared<PENDING_MESSAGE>();
 		pm->m = message;
+		if (atts)
+			pm->attachments = *atts;
 		pm->reasoning_callback = reasoning_callback;
 		pm->messaging_callback = messaging_callback;
 		pm->ptr = ptr;
@@ -575,6 +578,17 @@ nlohmann::json AuthStatus()
 		j["method"] = "session.send";
 		j["params"]["sessionId"] = s->sessionId;
 		j["params"]["prompt"] = pm->m;
+		if (pm->attachments.size())
+		{
+			j["params"]["attachments"] = nlohmann::json::array();
+			for (auto& a : pm->attachments)
+			{
+				nlohmann::json o;
+				o["type"] = "file";
+				o["path"] = toc(ChangeSlash(a.c_str()).c_str());
+				j["params"]["attachments"].push_back(o);
+			}
+		}
 		pm->id = j["id"];
 		s->pending_message = pm;
 		ret(j,false);
@@ -656,6 +670,17 @@ nlohmann::json AuthStatus()
 		WideCharToMultiByte(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size(), 0, 0);
 		return std::string(buf.data());
 	}
+	static std::wstring ChangeSlash(const wchar_t* s)
+	{
+		std::wstring r = s;
+		for (size_t i = 0; i < r.size(); i++)
+		{
+			if (r[i] == L'\\')
+				r[i] = L'/';
+		}
+		return r;
+	}
+
 
 	HANDLE hProcess = 0;
 	int debug = 0;
