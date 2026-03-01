@@ -17,15 +17,28 @@ struct MESSAGE
 
 };
 
-struct SESSION
+struct PENDING_MESSAGE
+{
+	std::string m;
+	std::string id;
+	std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr;
+	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
+	long long ptr = 0;
+	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
+	std::vector<std::shared_ptr<MESSAGE>> reasoning_messages;
+	std::vector<std::shared_ptr<MESSAGE>> output_messages;
+};
+
+
+struct COPILOT_SESSION
 {
 	std::string sessionId;
 	std::string cwd;
 	std::string title;
 	std::string updatedAt;
-	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
-	std::vector<std::shared_ptr<MESSAGE>> reasoning_messages;
-	std::vector<std::shared_ptr<MESSAGE>> output_messages;
+	std::string model;
+	std::shared_ptr<PENDING_MESSAGE> pending_message;
+	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
 };
 
 class COPILOT_RAW
@@ -36,11 +49,11 @@ class COPILOT_RAW
 	int nid = 1;
 	bool Headless = 1;
 
-	int next()
+	std::string next()
 	{
-		return nid++;
+		return std::to_string(nid++);
 	}
-	std::vector<std::shared_ptr<SESSION>> all_sessions;
+	std::vector<std::shared_ptr<COPILOT_SESSION>> all_sessions;
 
 
 	int ssend(const char* data, int len)
@@ -142,6 +155,21 @@ class COPILOT_RAW
 
 	}
 	*/
+
+	void GoPending(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (s->pending_messages.size())
+		{
+			auto pm = s->pending_messages[0];
+			s->pending_messages.erase(s->pending_messages.begin());
+			if (s->pending_message)
+			{
+				s->pending_message = nullptr;
+			}
+			Send(s, pm);
+		}
+	}
+
 	void WaitThread()
 	{
 		std::vector<char> pending;
@@ -189,7 +217,8 @@ class COPILOT_RAW
 									{
 										auto m = std::make_shared<MESSAGE>();
 										m->content = data["deltaContent"].get<std::string>();
-										s->reasoning_messages.push_back(m);
+										if (s->pending_message)
+											s->pending_message->reasoning_messages.push_back(m);
 										F = 1;
 										break;
 									}
@@ -206,7 +235,8 @@ class COPILOT_RAW
 									{
 										auto m = std::make_shared<MESSAGE>();
 										m->content = data["deltaContent"].get<std::string>();
-										s->output_messages.push_back(m);
+										if (s->pending_message)
+											s->pending_message->output_messages.push_back(m);
 										F = 1;
 										break;
 									}
@@ -221,11 +251,17 @@ class COPILOT_RAW
 								{
 									if (s->sessionId == sessionId)
 									{
-										if (!s->completed_message)
-											s->completed_message = std::make_shared<COMPLETED_MESSAGE>();
-										s->completed_message->content = data["content"].get<std::string>();
-										s->completed_message->messageId = data["messageId"].get<std::string>();
-										s->completed_message->reasoningText = data["reasoningText"].get<std::string>();
+										if (s->pending_message)
+										{
+											if (!s->pending_message->completed_message)
+												s->pending_message->completed_message = std::make_shared<COMPLETED_MESSAGE>();
+											s->pending_message->completed_message->content = data["content"].get<std::string>();
+											s->pending_message->completed_message->messageId = data["messageId"].get<std::string>();
+											if (data.contains("reasoningText"))
+												s->pending_message->completed_message->reasoningText = data["reasoningText"].get<std::string>();
+											s->pending_message = 0;
+										}
+										GoPending(s);
 										F = 1;
 										break;
 									}
@@ -235,7 +271,14 @@ class COPILOT_RAW
 							}
 							if (evtype == "session.idle")
 							{
-								__nop();
+								for (auto& s : all_sessions)
+								{
+									if (s->sessionId == sessionId)
+									{
+										GoPending(s);
+										break;
+									}
+								}
 							}
 
 							if (evtype == "session.start")
@@ -260,7 +303,7 @@ class COPILOT_RAW
 								}
 								if (!F)
 								{
-									auto s = std::make_shared<SESSION>();
+									auto s = std::make_shared<COPILOT_SESSION>();
 									s->sessionId = sessionId;
 									s->cwd = cwd;
 									all_sessions.push_back(s);
@@ -268,8 +311,9 @@ class COPILOT_RAW
 							}
 						}
 					}
-					catch (...)
+					catch (std::exception& e)
 					{
+						[[maybe_unused]] auto wh = e.what();
 						// Not a valid JSON, ignore
 						return;
 					}
@@ -306,16 +350,40 @@ class COPILOT_RAW
 		if (!w)
 			return {};
 
+		auto id = j["id"];
+
 		std::unique_lock<std::mutex> lock(m);
 		cv.wait(lock, [&] { return ready; });
 		ready = false;
 		std::string response;
 		{
-			std::lock_guard<std::recursive_mutex> lock(response_mutex);
-			if (!responses.empty())
+			bool F = 0;
+			for (;;)
 			{
-				response = responses.front();
-				responses.erase(responses.begin());
+				if (F)
+					break;
+				std::lock_guard<std::recursive_mutex> lock(response_mutex);
+				for (size_t ir = 0 ; ir < responses.size() ; ir++)
+				{
+					auto& r = responses[ir];
+					nlohmann::json rr;
+					try
+					{
+						rr = nlohmann::json::parse(r.c_str(), r.c_str() + r.size());
+					}
+					catch (...)
+					{
+						continue;
+					}
+					if (rr.contains("id") && rr["id"] == id)
+					{
+						response = r;
+						responses.erase(responses.begin(), responses.begin() + ir + 1);
+						F = 1;
+						break;
+					}
+				}
+				Sleep(100);
 			}
 		}
 		return nlohmann::json::parse(response.c_str(), response.c_str() + response.size());
@@ -367,7 +435,7 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
-	nlohmann::json DestroySession(std::shared_ptr<SESSION> s)
+	nlohmann::json DestroySession(std::shared_ptr<COPILOT_SESSION> s)
 	{
 		if (!s)
 			return {};
@@ -382,7 +450,7 @@ nlohmann::json AuthStatus()
 	}
 
 
-	void Abort(std::shared_ptr<SESSION> s)
+	void Abort(std::shared_ptr<COPILOT_SESSION> s)
 	{
 		if (!s)
 			return;
@@ -395,27 +463,78 @@ nlohmann::json AuthStatus()
 	}
 
 
-	int Wait(std::shared_ptr<SESSION> s,int WaitMs = 0)
+	void ExecuteCallbacks(std::shared_ptr<COPILOT_SESSION> se,std::shared_ptr<PENDING_MESSAGE> s)
+	{
+		for (size_t im = 0; im < s->reasoning_messages.size(); im++)
+		{
+			if (!s->reasoning_callback)
+				break;
+			auto rm = s->reasoning_messages[im];
+			if (rm)
+			{
+				if (rm->Ack == 1)
+					continue;
+				rm->Ack = 1;
+				std::string r = rm->content;
+				rm->content.clear();
+				auto hr = s->reasoning_callback(r, s->ptr);
+				if (FAILED(hr))
+					Abort(se);
+			}
+		}
+		for (size_t im = 0; im < s->output_messages.size(); im++)
+		{
+			if (!s->messaging_callback)
+				break;
+			auto rm = s->output_messages[im];
+			if (rm)
+			{
+				if (rm->Ack == 1)
+					continue;
+				std::string m = rm->content;
+				rm->Ack = 1;
+				auto hr = s->messaging_callback(m, s->ptr);
+				if (FAILED(hr))
+					Abort(se);
+			}
+		}
+	}
+
+	int Wait(std::shared_ptr<COPILOT_SESSION> s,std::shared_ptr<PENDING_MESSAGE> msg, int WaitMs = 0)
 	{
 		if (!s)
 			return -2;
+		if (!msg)
+			return -3;
 		int waited = 0;
 		for (;;)
 		{
 			if (1)
 			{
 				std::lock_guard<std::recursive_mutex> lock(response_mutex);
-				if (s->completed_message)
+				if (msg->completed_message)
 					return 0;
 			}
 			Sleep(100);
 			waited += 100;
 			if (WaitMs > 0 && waited >= WaitMs)
 				return -1;
+
+			ExecuteCallbacks(s, msg);
 		}
 	}
 
-	void Send(std::shared_ptr<SESSION> s, const char* message,int WaitMs = 0,std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr,long long ptr = 0)
+	std::shared_ptr<PENDING_MESSAGE> CreateMessage(std::shared_ptr<COPILOT_SESSION> s, const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0)
+	{
+		auto pm = std::make_shared<PENDING_MESSAGE>();
+		pm->m = message;
+		pm->reasoning_callback = reasoning_callback;
+		pm->messaging_callback = messaging_callback;
+		pm->ptr = ptr;
+		return pm;
+	}
+	
+	void Send(std::shared_ptr<COPILOT_SESSION> s, std::shared_ptr<PENDING_MESSAGE> wh)
 	{
 		if (!s)
 			return;
@@ -425,105 +544,45 @@ nlohmann::json AuthStatus()
 
 		if (1)
 		{
-			std::lock_guard<std::recursive_mutex> lock(response_mutex);
-			responses.clear();
+			bool HasPending = 0;
+
+			if (1)
+			{
+				std::lock_guard<std::recursive_mutex> lock(response_mutex);
+				if (s->pending_message)
+					HasPending = 1;
+			}
+			if (HasPending)
+			{
+				// Not idle, queue the message
+				if (1)
+				{
+					std::lock_guard<std::recursive_mutex> lock(response_mutex);
+					s->pending_messages.push_back(wh);
+				}
+				return;
+			}
+			else
+			{
+				responses.clear();
+			}
 		}
-		s->completed_message = nullptr;
-		s->reasoning_messages.clear();
-		s->output_messages.clear();
+
+		std::shared_ptr<PENDING_MESSAGE> pm = wh;
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
 		j["method"] = "session.send";
 		j["params"]["sessionId"] = s->sessionId;
-		j["params"]["prompt"] = message;
+		j["params"]["prompt"] = pm->m;
+		pm->id = j["id"];
+		s->pending_message = pm;
 		ret(j,false);
-
-		if (WaitMs > 0)
-		{
-			int waited = 0;
-			while (waited < WaitMs)
-			{
-				Sleep(100);
-				waited += 100;
-				std::lock_guard<std::recursive_mutex> lock(response_mutex);
-				if (s->completed_message)
-					break;
-
-
-				// See responses if there is a session-idle
-				for (auto& r : responses)
-				{
-					nlohmann::json rr;
-					try
-					{
-						rr = nlohmann::json::parse(r.c_str(), r.c_str() + r.size());
-
-						if (rr.contains("method") && rr["method"] == "session.event" && rr.contains("params") && rr["params"].contains("event") && rr["params"]["event"].contains("type"))
-						{
-							auto data = rr["params"]["event"]["data"];
-							std::string sessionId, cwd;
-							if (rr["params"].contains("sessionId"))
-								sessionId = rr["params"]["sessionId"].get<std::string>();
-							std::string evtype = rr["params"]["event"]["type"].get<std::string>();
-							if (evtype == "session.idle" && sessionId == s->sessionId)
-							{
-								// It's idle, we can stop waiting
-								waited = WaitMs;
-								break;
-							}
-						}
-					}
-					catch (...)
-					{
-						// Not a valid JSON, ignore
-						continue;
-					}
-				}
-				
-
-				for (size_t im = 0; im < s->reasoning_messages.size(); im++)
-				{
-					if (!reasoning_callback)
-						break;
-					auto rm = s->reasoning_messages[im];
-					if (rm)
-					{
-						if (rm->Ack == 1)
-							continue;
-						rm->Ack = 1;
-						std::string r = rm->content;
-						rm->content.clear();
-						auto hr = reasoning_callback(r, ptr);
-						if (FAILED(hr))
-							Abort(s);
-					}
-				}
-				for (size_t im = 0; im < s->output_messages.size(); im++)
-				{
-					if (!messaging_callback)
-						break;
-					auto rm = s->output_messages[im];
-					if (rm)
-					{
-						if (rm->Ack == 1)
-							continue;
-						std::string m = rm->content;
-						rm->Ack = 1;
-						auto hr = messaging_callback(m,ptr);
-						if (FAILED(hr))
-							Abort(s);
-					}
-				}
-			}
-			if (1)
-				return;
-		}
-
+		return;
 	}
 
 
-	nlohmann::json Sessions(std::vector<std::shared_ptr<SESSION>>& sessions)
+	nlohmann::json Sessions(std::vector<std::shared_ptr<COPILOT_SESSION>>& sessions)
 	{
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
@@ -537,7 +596,7 @@ nlohmann::json AuthStatus()
 		// it's in r["result"]["sessions"]
 		for (auto& s : r["result"]["sessions"])
 		{
-			SESSION se;
+			COPILOT_SESSION se;
 			if (s.contains("sessionId"))
 				se.sessionId = s["sessionId"].get<std::string>();
 			if (s.contains("cwd"))
@@ -546,7 +605,7 @@ nlohmann::json AuthStatus()
 				se.title = s["title"].get<std::string>();
 			if (s.contains("updatedAt"))
 				se.updatedAt = s["updatedAt"].get<std::string>();
-			auto se2 = std::make_shared<SESSION>(se);
+			auto se2 = std::make_shared<COPILOT_SESSION>(se);
 			sessions.push_back(se2);
 		}
 		all_sessions = sessions;
@@ -554,7 +613,7 @@ nlohmann::json AuthStatus()
 	}
 
 
-	std::shared_ptr<SESSION> CreateSession(const char* model_id,bool Streaming)
+	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id,bool Streaming)
 	{
 		// {"jsonrpc":"2.0","id":"62587fbb-6596-4144-8014-62403b7d6a97","method":"session.create","params":{"model":"gpt-5-mini","requestPermission":true,"envValueMode":"direct"}}
 		nlohmann::json j;
@@ -569,13 +628,16 @@ nlohmann::json AuthStatus()
 		j["params"] = params;
 		auto old_num_sessions = all_sessions.size();
 		ret(j,false);
-			// wait for a response that has the "id" of that
 		for (int tries = 0 ; tries < 100 ; tries++)
 		{
 			Sleep(100);
 			std::lock_guard<std::recursive_mutex> lock(response_mutex);
 			if (old_num_sessions < all_sessions.size())
-				return all_sessions.back();
+			{
+				auto se = all_sessions.back();
+				se->model = model_id;
+				return se;
+			}
 		}
 		return nullptr;
 	}
@@ -596,8 +658,10 @@ nlohmann::json AuthStatus()
 	}
 
 	HANDLE hProcess = 0;
-	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token)
+	int debug = 0;
+	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token,int Debug)
 	{
+		debug = Debug;
 		std::vector<wchar_t> cmd(1000);
 		GUID tok = {};
 		CoCreateGuid(&tok);
@@ -607,7 +671,9 @@ nlohmann::json AuthStatus()
 		toks.erase(std::remove(toks.begin(), toks.end(), '{'), toks.end());
 		toks.erase(std::remove(toks.begin(), toks.end(), '}'), toks.end());
 
-		swprintf_s(cmd.data(), 1000, L"\"%s\" --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli,toks.data(), port);
+		swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli,toks.data(), port);
+		if (debug == 2)
+			swprintf_s(cmd.data(), 1000, L"cmd /k \"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli, toks.data(), port);
 		PROCESS_INFORMATION pi = {};
 		STARTUPINFO si = {};
 		si.cb = sizeof(STARTUPINFO);
@@ -631,7 +697,12 @@ nlohmann::json AuthStatus()
 
 		envBlock.push_back('\0');
 
-		CreateProcess(0, cmd.data(), nullptr, nullptr, FALSE, CREATE_NEW_CONSOLE | CREATE_UNICODE_ENVIRONMENT,envBlock.data(), nullptr, &si, &pi);
+		DWORD flg = CREATE_UNICODE_ENVIRONMENT;
+		if (debug == 0)
+			flg |= CREATE_NO_WINDOW;
+		else
+			flg |= CREATE_NEW_CONSOLE;
+		CreateProcess(0, cmd.data(), nullptr, nullptr, FALSE, flg,envBlock.data(), nullptr, &si, &pi);
 		hProcess = pi.hProcess;
 		if (pi.hThread)
 			CloseHandle(pi.hThread);

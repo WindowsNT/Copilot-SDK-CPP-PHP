@@ -59,9 +59,9 @@ int wmain()
 
 #endif
 	COPILOT_RAW raw("127.0.0.1", 3000, true);
-//	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token");
+//	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token",1);
 	raw.Ping();
-	std::vector<std::shared_ptr<SESSION>> sessions;
+	std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 	raw.Sessions(sessions);
 	
 	auto as = raw.AuthStatus();
@@ -69,8 +69,9 @@ int wmain()
 	auto ml = raw.ModelList();
 	dup = ml.dump();
 //	auto s1 = raw.CreateSession("gpt-4.1", true);
-	auto s1 = raw.CreateSession("gpt-5-mini", true);
-	raw.Send(s1, "Please tell me all numbers from 1 to 100", 60000, [&](std::string tok,long long ptr) -> HRESULT	{
+	auto s1 = raw.CreateSession("gpt-5-mini", false);
+	auto m1 = raw.CreateMessage(s1, "Hello", 0);
+	auto m2 = raw.CreateMessage(s1, "Please tell me all numbers from 1 to 100", [&](std::string tok, long long ptr) -> HRESULT {
 		std::cout << tok;
 		if (brk)
 		{
@@ -78,10 +79,13 @@ int wmain()
 			return E_ABORT;
 		}
 		return S_OK;
-	}, [&](std::string tok, long long ptr) -> HRESULT {
-		std::cout << tok;
-		return S_OK;
-		},0);
+		}, [&](std::string tok, long long ptr) -> HRESULT {
+			std::cout << tok;
+			return S_OK;
+			}, 0);
+	raw.Send(s1, m1);
+	raw.Send(s1, m2);
+	raw.Wait(s1, m2, 60000);
 	__nop();
 }
 

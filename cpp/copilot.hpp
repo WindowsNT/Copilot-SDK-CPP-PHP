@@ -1861,7 +1861,7 @@ public:
 		return ans->Collect();
 	}
 
-	std::vector<COPILOT_SDK_MODEL> ModelsFromJ(std::string s)
+	static std::vector<COPILOT_SDK_MODEL> ModelsFromJ(std::string s)
 	{
 		try
 		{
