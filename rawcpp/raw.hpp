@@ -3,6 +3,12 @@
 typedef int SOCKET;
 #endif
 
+#include <sstream>
+#include <wininet.h>
+#include "rest.h"
+
+inline static HRESULT OllamaRunning2;
+
 struct COMPLETED_MESSAGE
 {
 	std::string content;
@@ -10,11 +16,45 @@ struct COMPLETED_MESSAGE
 	std::string reasoningText;
 };
 
-struct MESSAGE
+struct COPILOT_MESSAGE
 {
 	std::string content;
 	int Ack = 0;
 
+};
+
+struct COPILOT_RAW_SDK_MODEL
+{
+	std::string id;
+	std::string name;
+	bool SupportsVision = false;
+	std::vector<std::string> supportedvisionmediatypes;
+	int MaxPromptTokens = 0;
+	int MaxContextWindowTokens = 0;
+	int MaxPromptImages = 0;
+	int MaxPromptImageSize = 0;
+	std::string Terms;
+	float BillingMultiplier = 0.0f;
+};
+
+struct COPILOT_RAW_MODEL
+{
+	std::string id;
+	std::string fullname;
+	float rate = 0.0f;
+	bool SupportsVision = 0;
+	bool Ollama = 0;
+};
+
+struct COPILOT_RAW_STATUS
+{
+	bool StatusValid = false;
+	bool Installed = false;
+	std::wstring folder;
+	bool OllamaInstalled = false;
+	bool Connected = false;
+	bool Authenticated = false;
+	std::vector<COPILOT_RAW_MODEL> models;
 };
 
 struct PENDING_MESSAGE
@@ -26,20 +66,276 @@ struct PENDING_MESSAGE
 	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
 	long long ptr = 0;
 	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
-	std::vector<std::shared_ptr<MESSAGE>> reasoning_messages;
-	std::vector<std::shared_ptr<MESSAGE>> output_messages;
+	std::vector<std::shared_ptr<COPILOT_MESSAGE>> reasoning_messages;
+	std::vector<std::shared_ptr<COPILOT_MESSAGE>> output_messages;
 };
 
 
 struct COPILOT_SESSION
 {
+	SOCKET ollama = 0;
+	bool OllamaStreaming = false;
+	std::string ollama_context;
+	std::shared_ptr<std::thread> OllamaThread;
 	std::string sessionId;
 	std::string cwd;
 	std::string title;
-	std::string updatedAt;
 	std::string model;
 	std::shared_ptr<PENDING_MESSAGE> pending_message;
 	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
+
+	int nid = 1;
+
+	std::vector<std::string> ExtractChunkedResponses(std::vector<char>& b)
+	{
+		// Might not have ContentLength, but instead be chunked with \r\n after each chunk, and end with \r\n0\r\n\r\n
+		/*
+		
+		// This is like this
+
+		HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+Date: Sun, 01 Mar 2026 08:32:15 GMT
+Transfer-Encoding: chunked
+\r\n
+876
+{"model":"phi:latest","created_at":"2026-03-01T08:32:15.1913205Z","response":" Here are the numbers from 1 to 100:\n\n```\n1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100\n```\n\n","done":true,"done_reason":"stop","context":[11964,25,317,8537,1022,257,11040,2836,290,281,11666,4430,8796,13,383,8796,3607,7613,7429,284,262,2836,6,82,2683,13,198,12982,25,4222,1560,502,477,3146,422,220,16,284,220,3064,198,48902,25,3423,389,262,3146,422,220,16,284,220,3064,25,198,198,15506,63,198,16,11,220,17,11,220,18,11,220,19,11,220,20,11,220,21,11,220,22,11,220,23,11,220,24,11,220,940,11,220,1157,11,220,1065,11,220,1485,11,220,1415,11,220,1314,11,220,1433,11,220,1558,11,220,1507,11,220,1129,11,220,1238,11,220,2481,11,220,1828,11,220,1954,11,220,1731,11,220,1495,11,220,2075,11,220,1983,11,220,2078,11,220,1959,11,220,1270,11,220,3132,11,220,2624,11,220,2091,11,220,2682,11,220,2327,11,220,2623,11,220,2718,11,220,2548,11,220,2670,11,220,1821,11,220,3901,11,220,3682,11,220,3559,11,220,2598,11,220,2231,11,220,3510,11,220,2857,11,220,2780,11,220,2920,11,220,1120,11,220,4349,11,220,4309,11,220,4310,11,220,4051,11,220,2816,11,220,3980,11,220,3553,11,220,3365,11,220,3270,11,220,1899,11,220,5333,11,220,5237,11,220,5066,11,220,2414,11,220,2996,11,220,2791,11,220,3134,11,220,3104,11,220,3388,11,220,2154,11,220,4869,11,220,4761,11,220,4790,11,220,4524,11,220,2425,11,220,4304,11,220,3324,11,220,3695,11,220,3720,11,220,1795,11,220,6659,11,220,6469,11,220,5999,11,220,5705,11,220,5332,11,220,4521,11,220,5774,11,220,3459,11,220,4531,11,220,3829,11,220,6420,11,220,5892,11,220,6052,11,220,5824,11,220,3865,11,220,4846,11,220,5607,11,220,4089,11,220,2079,11,220,3064,198,15506,63,628],"total_duration":2334862500,"load_duration":55095900,"prompt_eval_count":43,"prompt_eval_duration":15410800,"eval_count":218,"eval_duration":2145463700}
+size
+{...}
+0
+
+		*/
+		b.push_back(0); // Null terminate for easier searching
+		std::vector<std::string> rs;
+		for (int trr = 0 ; ; trr++)
+		{
+			auto c1 = strstr(b.data(), "\r\n\r\n");
+			if (trr > 0)
+			{
+				c1 = b.data();
+				if (c1 == nullptr)
+					break;
+			}
+			else
+			{
+				if (c1 == nullptr)
+					break;
+				c1 += 4;
+			}
+			std::string len_str(c1);
+			int chunk_size = std::stoi(len_str, nullptr, 16);
+			if (chunk_size == 0)
+			{
+				// End of chunks
+				b.clear();
+				break;
+			}
+			// go to next line
+			auto c2 = strstr(c1, "{");
+			if (c2 == nullptr)
+				break;
+			std::string chunk(c2, c2 + chunk_size);
+			rs.push_back(chunk);
+
+			std::vector<char> newb;
+			auto chunk_end = c2 + chunk_size + 2; // skip \r\n after chunk
+			if (*chunk_end == 0)
+				chunk_end++;
+			while (*chunk_end)
+				{
+				newb.push_back(*chunk_end);
+				chunk_end++;
+			}
+			b = std::move(newb);
+			if (strlen(b.data()) < 4)
+			{
+				b.clear();
+				break;
+			}
+		}
+
+		return rs;
+	}
+
+
+	std::vector<std::string> ExtractResponsesFromBuffer(std::vector<char>& b)
+	{
+		std::vector<std::string> rs;
+
+		// Find Content-Length: XXX\r\n\r\n
+		for (;;)
+		{
+			auto c1 = std::search(b.begin(), b.end(), "Content-Length: ", "Content-Length: " + 16);
+			if (c1 == b.end())
+				break;
+			c1 += 16;
+			auto c2 = std::search(c1, b.end(), "\r\n\r\n", "\r\n\r\n" + 4);
+			if (c2 == b.end())
+				break;
+			std::string len_str(c1, c2);
+			int content_length = std::stoi(len_str);
+			auto content_start = c2 + 4;
+			// This is invalid because it seeks after end, fix it
+			if (std::distance(content_start, b.end()) < content_length)
+				break;
+			std::string content(content_start, content_start + content_length);
+			rs.push_back(content);
+			b.erase(b.begin(), content_start + content_length);
+		}
+		return rs;
+	}
+
+
+
+	void OllThread()
+	{
+
+		std::vector<char> pending;
+
+		for (;;)
+		{
+			std::vector<char> buf(4096);
+			int received = recv(ollama, buf.data(), (int)buf.size(), 0);
+			if (received == SOCKET_ERROR || received == 0)
+			{
+				// Connection closed or error
+				return;
+			}
+			buf.resize(received);
+			pending.insert(pending.end(), buf.begin(), buf.end());
+
+			auto responses2 = ExtractResponsesFromBuffer(pending);
+			if (responses2.empty())
+				responses2 = ExtractChunkedResponses(pending);
+			for (auto& r : responses2)
+			{
+				try
+				{
+					nlohmann::json j = nlohmann::json::parse(r);
+					if (j.contains("response"))
+					{
+						std::string content = j["response"].get<std::string>();
+						if (pending_message)
+						{
+							pending_message->output_messages.push_back(std::make_shared<COPILOT_MESSAGE>(COPILOT_MESSAGE{ content }));
+						}
+					}
+
+					// and context
+					if (j.contains("context"))
+					{
+						ollama_context = j["context"].dump();
+					}
+
+				}
+				catch (...)
+				{
+				}
+			}
+			if (pending_message)
+			{
+				auto m2 = std::make_shared<COMPLETED_MESSAGE>();
+				for (auto& m : pending_message->output_messages)
+				{
+					m2->content += m->content;
+				}
+				pending_message->completed_message = m2;
+			}
+		}
+	}
+
+	int ssend(const char* data, int len)
+	{
+		int total_sent = 0;
+		while (total_sent < len)
+		{
+			int sent = send(ollama, data + total_sent, len - total_sent, 0);
+			if (sent == 0 || sent == -1)
+				return -1;
+			total_sent += sent;
+		}
+		return total_sent;
+	}
+
+
+	void OllamaSend(std::shared_ptr<PENDING_MESSAGE> wh)
+	{
+		if (!ollama || !wh)
+			return;
+
+		/*
+		* POST /api/generate HTTP/1.1
+Host: localhost:11434
+Content-Type: application/json
+Content-Length: ...
+Connection: keep-alive
+
+{
+ "model":"llama3",
+ "prompt":"Hello",
+ "stream":true
+}
+		*/
+
+		std::string build;
+		build += "POST /api/generate HTTP/1.1\r\n";
+		build += "Host: localhost:11434\r\n";
+		build += "Content-Type: application/json\r\n";
+		std::string body;
+		body += "{";
+		body += "\"model\":\"";
+		body += model;
+		body += "\",";
+		body += "\"prompt\":\"";
+		body += wh->m;
+		body += "\",";
+		std::string id = std::to_string(nid++);
+		body += "\"id\":\"";
+		body += id;
+		body += "\",";
+
+		if (ollama_context.size())	
+		{
+			body += "\"context\":";
+			body += ollama_context;
+			body += ",";
+		}
+
+		//if (OllamaStreaming)
+	//		body += "\"stream\":true";
+	//	else
+			body += "\"stream\":false";
+		body += "}";
+		build += "Content-Length: " + std::to_string(body.size()) + "\r\n";
+		build += "Connection: keep-alive\r\n\r\n";
+		build += body;
+
+		pending_message = wh;
+		pending_message->id = id;
+		ssend(build.c_str(), (int)build.size());
+		for (int tries = 0; tries < 100; tries++)
+		{
+			if (pending_message->completed_message)
+				break;
+			Sleep(100);
+		}
+	}
+
+	void OllamaOff()
+	{
+		if (ollama)
+			closesocket(ollama);
+		ollama = 0;
+		if (OllamaThread && OllamaThread->joinable())
+		{
+			OllamaThread->join();
+		}
+		OllamaThread = nullptr;
+	}
+	virtual ~COPILOT_SESSION()
+	{
+		OllamaOff();
+	}
 };
 
 class COPILOT_RAW
@@ -108,54 +404,6 @@ class COPILOT_RAW
 		return rs;
 	}
 
-/*	HRESULT GetAFullResponse()
-	{
-		std::vector<char> buf = pending;
-		pending.clear();
-		auto cs = buf.size();
-		buf.resize(cs + 4096);
-		int HasFoundLength = 0;
-		for(;;)
-		{
-			int received = recv(x, buf.data() + cs, 4096, 0);
-			if (received == SOCKET_ERROR)
-				return E_ABORT;
-		buf.resize(cs + received);
-		if (HasFoundLength == 0)
-		{
-			// Check if there's a Content-Length header and if we have received the full response
-			size_t header_end = response.find("\r\n\r\n");
-			if (header_end != std::string::npos)
-			{
-				size_t content_length_pos = response.find("Content-Length: ");
-				if (content_length_pos != std::string::npos)
-				{
-					size_t content_length_end = response.find("\r\n", content_length_pos);
-					if (content_length_end != std::string::npos)
-					{
-						std::string content_length_str = response.substr(content_length_pos + 16, content_length_end - (content_length_pos + 16));
-						int content_length = std::stoi(content_length_str);
-						size_t total_response_size = header_end + 4 + content_length;
-						MustContentLength = total_response_size;
-						if (response.size() >= total_response_size)
-						{
-							response = response.substr(header_end + 4, content_length);
-							break;
-						}
-					}
-				}
-			}
-		}
-			else
-			{
-				if (response.find("\n") != std::string::npos)
-					break;
-			}
-		}
-
-
-	}
-	*/
 
 	void GoPending(std::shared_ptr<COPILOT_SESSION> s)
 	{
@@ -216,7 +464,7 @@ class COPILOT_RAW
 								{
 									if (s->sessionId == sessionId)
 									{
-										auto m = std::make_shared<MESSAGE>();
+										auto m = std::make_shared<COPILOT_MESSAGE>();
 										m->content = data["deltaContent"].get<std::string>();
 										if (s->pending_message)
 											s->pending_message->reasoning_messages.push_back(m);
@@ -234,7 +482,7 @@ class COPILOT_RAW
 								{
 									if (s->sessionId == sessionId)
 									{
-										auto m = std::make_shared<MESSAGE>();
+										auto m = std::make_shared<COPILOT_MESSAGE>();
 										m->content = data["deltaContent"].get<std::string>();
 										if (s->pending_message)
 											s->pending_message->output_messages.push_back(m);
@@ -440,6 +688,11 @@ nlohmann::json AuthStatus()
 	{
 		if (!s)
 			return {};
+		if (s->ollama)
+		{
+			s->OllamaOff();
+			return {};
+		}
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
@@ -536,11 +789,27 @@ nlohmann::json AuthStatus()
 		pm->ptr = ptr;
 		return pm;
 	}
-	
+
+	void SendOllama(std::shared_ptr<COPILOT_SESSION> s, std::shared_ptr<PENDING_MESSAGE> wh)
+	{
+		if (!s)
+			return;
+		if (!s->ollama)
+			return;
+
+		s->OllamaSend(wh);
+
+	}
+
 	void Send(std::shared_ptr<COPILOT_SESSION> s, std::shared_ptr<PENDING_MESSAGE> wh)
 	{
 		if (!s)
 			return;
+		if (s->ollama)
+		{
+			SendOllama(s, wh);
+			return;
+		}
 		if (s->sessionId.empty())
 			return;
 		// {"jsonrpc":"2.0","id":"11443832-6639-43f5-b202-8803c8156e46","method":"session.send","params":{"sessionId":"17a317f3-3faf-4401-b1dc-3d918c64a2f4","prompt":"What is 2+2?","attachments":null,"mode":null}}
@@ -617,8 +886,6 @@ nlohmann::json AuthStatus()
 				se.cwd = s["cwd"].get<std::string>();
 			if (s.contains("title"))
 				se.title = s["title"].get<std::string>();
-			if (s.contains("updatedAt"))
-				se.updatedAt = s["updatedAt"].get<std::string>();
 			auto se2 = std::make_shared<COPILOT_SESSION>(se);
 			sessions.push_back(se2);
 		}
@@ -626,9 +893,228 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
+	static std::vector<COPILOT_RAW_SDK_MODEL> ModelsFromJ(std::string s)
+	{
+		try
+		{
+			auto jx = nlohmann::json::parse(s);
+			std::vector<COPILOT_RAW_SDK_MODEL> models;
+			for (auto& item : jx)
+			{
+				COPILOT_RAW_SDK_MODEL m;
+				m.id = item["id"].get<std::string>();
+				m.name = item["name"].get<std::string>();
+				if (item.contains("capabilities") && item["capabilities"].contains("limits"))
+				{
+					auto& limits = item["capabilities"]["limits"];
+					if (limits.contains("max_prompt_tokens"))
+						m.MaxPromptTokens = limits["max_prompt_tokens"].get<int>();
+					if (limits.contains("max_context_window_tokens"))
+						m.MaxContextWindowTokens = limits["max_context_window_tokens"].get<int>();
+					if (limits.contains("vision"))
+					{
+						auto& vision = limits["vision"];
+						if (vision.contains("supported_media_types"))
+						{
+							m.SupportsVision = true;
+							for (auto& mt : vision["supported_media_types"])
+								m.supportedvisionmediatypes.push_back(mt.get<std::string>());
+						}
+						if (vision.contains("max_prompt_images"))
+							m.MaxPromptImages = vision["max_prompt_images"].get<int>();
+						if (vision.contains("max_prompt_image_size"))
+							m.MaxPromptImageSize = vision["max_prompt_image_size"].get<int>();
+					}
+					// policy
+					if (item.contains("policy"))
+					{
+						auto& policy = item["policy"];
+						if (policy.contains("terms"))
+							m.Terms = policy["terms"].get<std::string>();
+					}
+
+					// billing multiplier
+					if (item.contains("billing") && item["billing"].contains("multiplier"))
+						m.BillingMultiplier = item["billing"]["multiplier"].get<float>();
+
+					models.push_back(m);
+				}
+			}
+			return models;
+		}
+		catch (...)
+		{
+			return {};
+		}
+	}
+
+
+	static void TryOllamaRunning()
+	{
+		if (OllamaRunning2 != S_FALSE)
+			return;
+		SOCKET x = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (x == INVALID_SOCKET)
+		{
+			OllamaRunning2 = E_FAIL;
+			return;
+		}
+		sockaddr_in sa = { 0 };
+		sa.sin_family = AF_INET;
+		sa.sin_port = htons(11434);
+#pragma warning(disable:4996)
+		sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+#pragma warning(default:4996)
+		int res = connect(x, (sockaddr*)&sa, sizeof(sa));
+		closesocket(x);
+		if (res == SOCKET_ERROR)
+			OllamaRunning2 = E_FAIL;
+		else
+			OllamaRunning2 = S_OK;
+	}
+
+	static void DetectOllamaRunning()
+	{
+		if (OllamaRunning2 == S_FALSE)
+		{
+			std::thread tx([&]()
+				{
+					TryOllamaRunning();
+				});
+			tx.detach();
+		}
+
+	}
+
+
+	static std::vector<COPILOT_RAW_MODEL> ollama_list()
+	{
+		//http://localhost:11434/api/tags
+		RESTAPI::REST r;
+		r.Connect(L"localhost", false, 11434);
+		RESTAPI::memory_data_provider d(0, 0);
+		auto ji = r.Request2(L"/api/tags", d, true, L"GET");
+		std::vector<char> dd;
+		r.ReadToMemory(ji, dd);
+		if (dd.size() == 0)
+			return {};
+		std::string s(dd.data(), dd.size());
+		auto jx = nlohmann::json::parse(s);
+		std::vector<COPILOT_RAW_MODEL> models;
+		for (auto& item : jx["models"])
+		{
+			std::string name = item["model"];
+			COPILOT_RAW_MODEL m;
+			m.id = name;
+			m.fullname = name;
+			m.rate = 0.0f;
+			m.Ollama = 1;
+			models.push_back(m);
+		}
+		return models;
+	}
+
+	std::vector<COPILOT_RAW_MODEL> CopilotModels()
+	{
+		auto mod = ModelList();
+		auto sdk_models = ModelsFromJ(mod["result"]["models"].dump());
+		std::vector<COPILOT_RAW_MODEL> models;
+		for (const auto& sdk_model : sdk_models)
+		{
+			COPILOT_RAW_MODEL m;
+			m.fullname = sdk_model.name;
+			m.id = sdk_model.id;
+			m.rate = sdk_model.BillingMultiplier;
+			m.SupportsVision = sdk_model.SupportsVision;
+			m.Ollama = 0;
+			models.push_back(m);
+		}
+		return models;
+	}
+
+	COPILOT_RAW_STATUS Status()
+	{
+		COPILOT_RAW_STATUS s;
+		s.Installed = 1;
+		s.folder = cli_path;
+		s.Connected = 1;
+		auto auth = AuthStatus();
+		// this is json
+		auto du = auth.dump();
+		if (auth.contains("result"))
+		{
+			if (auth["result"].contains("isAuthenticated"))
+			{
+				bool isAuthenticated = auth["result"]["isAuthenticated"].get<bool>();
+				s.Authenticated = isAuthenticated;
+			}
+		}
+
+		s.models = CopilotModels();
+		if (OllamaRunning2 == S_OK)
+		{
+			auto ollama_models = ollama_list();
+			s.models.insert(s.models.end(), ollama_models.begin(), ollama_models.end());
+		}
+		return s;
+	}
+
+
+	std::shared_ptr<COPILOT_SESSION> CreateOllamaSession(const char* model_id, bool Streaming)
+	{
+		if (OllamaRunning2 != S_OK)
+			return nullptr;
+		auto ollama_models = ollama_list();
+		bool F = 0;
+		for (auto& m : ollama_models)
+		{
+			if (m.id == model_id)
+			{
+				F = 1;
+				break;
+			}
+		}
+		if (!F)
+			return nullptr;
+
+		auto se = std::make_shared<COPILOT_SESSION>();
+		se->model = model_id;
+		se->ollama = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+		if (se->ollama == INVALID_SOCKET)
+			return nullptr;
+
+		sockaddr_in sa = { 0 };
+		sa.sin_family = AF_INET;
+		sa.sin_port = htons(11434);
+#pragma warning(disable:4996)
+		sa.sin_addr.s_addr = inet_addr("127.0.0.1");
+#pragma warning(default:4996)
+		int res = connect(se->ollama, (sockaddr*)&sa, sizeof(sa));
+		if (res == SOCKET_ERROR)
+		{
+			closesocket(se->ollama);
+			return nullptr;
+		}
+		se->OllamaStreaming = Streaming;
+		se->OllamaThread = std::make_shared<std::thread>(&COPILOT_SESSION::OllThread, se.get());
+		return se;
+	}
 
 	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id,bool Streaming)
 	{
+		auto models = CopilotModels();
+		bool F = 0;
+		for (auto& m : models)
+		{
+			if (m.id == model_id)
+			{
+				F = 1;
+				break;
+			}
+		}
+		if (!F)
+			return CreateOllamaSession(model_id, Streaming);
+
 		// {"jsonrpc":"2.0","id":"62587fbb-6596-4144-8014-62403b7d6a97","method":"session.create","params":{"model":"gpt-5-mini","requestPermission":true,"envValueMode":"direct"}}
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
@@ -655,6 +1141,7 @@ nlohmann::json AuthStatus()
 		}
 		return nullptr;
 	}
+
 
 
 #ifdef _WIN32
@@ -684,9 +1171,12 @@ nlohmann::json AuthStatus()
 
 	HANDLE hProcess = 0;
 	int debug = 0;
+	std::wstring cli_path;
 	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token,int Debug)
 	{
 		debug = Debug;
+		DetectOllamaRunning();
+		cli_path = path_to_cli;
 		std::vector<wchar_t> cmd(1000);
 		GUID tok = {};
 		CoCreateGuid(&tok);
@@ -698,7 +1188,7 @@ nlohmann::json AuthStatus()
 
 		swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli,toks.data(), port);
 		if (debug == 2)
-			swprintf_s(cmd.data(), 1000, L"cmd /k \"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli, toks.data(), port);
+			swprintf_s(cmd.data(), 1000, L"cmd.exe /L \"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli, toks.data(), port);
 		PROCESS_INFORMATION pi = {};
 		STARTUPINFO si = {};
 		si.cb = sizeof(STARTUPINFO);
@@ -766,6 +1256,7 @@ nlohmann::json AuthStatus()
 	COPILOT_RAW(const char* ip, int port,bool hl)
 	{
 		Headless = hl;
+		DetectOllamaRunning();
 		host = ip;
 		this->port = port;
 		Start();

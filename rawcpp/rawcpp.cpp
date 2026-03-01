@@ -17,6 +17,7 @@
 #ifdef _WIN32
 #include <winsock2.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "wininet.lib")
 #endif
 #include <fcntl.h>
 #include <errno.h>
@@ -66,9 +67,9 @@ int wmain()
 	
 	auto as = raw.AuthStatus();
 	auto dup = as.dump();
-	auto ml = raw.ModelList();
-	dup = ml.dump();
+	auto st = raw.Status();
 	auto s1 = raw.CreateSession("gpt-4.1", true);
+//	auto s1 = raw.CreateSession("phi:latest", true);
 //	auto s1 = raw.CreateSession("gpt-5-mini", false);
 //	auto m1 = raw.CreateMessage(s1, "Hello", 0);
 	std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
@@ -88,6 +89,7 @@ int wmain()
 	raw.Send(s1, m1);
 	raw.Send(s1, m2);
 	raw.Wait(s1, m2, 60000);
+	raw.Wait(s1, m1, 60000);
 	__nop();
 }
 
