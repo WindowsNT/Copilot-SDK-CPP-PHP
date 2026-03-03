@@ -3,7 +3,7 @@
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
 I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare), [FaustChat](https://www.turbo-play.com/copilot.php?from=FaustChat) and other projects.
 
-# Copilot Installation
+# Copilot Installation with Python SDK
 * Create a folder with python installed 
 * put raw.py in that folder
 * pip install github-copilot-sdk asyncio pywin32
@@ -12,7 +12,7 @@ I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](htt
 # LLama Installation
 Create a folder where [llama-server](https://github.com/ggml-org/llama.cpp/releases) is located.
 
-# Raw installation
+# Raw installation without Python SDK
 There 's a raw C++ only method  (without the python sdk or python installation) that communicates with copilot.exe directly, see below.
 
 # Ollama 
@@ -286,7 +286,7 @@ raw.Send(s1, m2);
 raw.Wait(s1, m2, 60000);
 raw.Wait(s1, m1, 60000);
 ```
-
+`raw.hpp` contains special version of COPILOT_RAW_STATUS etc. The python-based `copilot.hpp` methods are independent of the raw methods.
 Caution, this method is more low level and may break if there are changes in the copilot CLI. It also doesn't support all features of the SDK, such as tools and attachments.
 
 
@@ -296,6 +296,8 @@ Command line parameters:
 * -f <folder> : folder where copilot.exe and python are located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
 * -m <model> : model name,  default is "gpt-5 mini"
 * --token <token> : A github token to use. If not used, the default copilot authentication is used.
+
+
 
 Once CopilotChat is running, you can use the commands:
 * /install or /update       : Installs or updates Copilot. This downloads binaries available in www.turbo-play.com and runs pip to install prerequisites. 
