@@ -258,6 +258,40 @@ size
 	}
 
 
+	std::string encode_for_json(const std::string& s)
+	{
+		std::ostringstream o;
+
+		for (unsigned char c : s)
+		{
+			switch (c)
+			{
+			case '"':  o << "\\\""; break;
+			case '\\': o << "\\\\"; break;
+			case '\b': o << "\\b";  break;
+			case '\f': o << "\\f";  break;
+			case '\n': o << "\\n";  break;
+			case '\r': o << "\\r";  break;
+			case '\t': o << "\\t";  break;
+
+			default:
+				if (c < 0x20)
+				{
+					o << "\\u"
+						<< std::hex << std::uppercase
+						<< std::setw(4) << std::setfill('0')
+						<< (int)c;
+				}
+				else
+				{
+					o << c;
+				}
+			}
+		}
+
+		return o.str();
+	}
+
 	void OllamaSend(std::shared_ptr<PENDING_MESSAGE> wh)
 	{
 		if (!ollama || !wh)
@@ -287,7 +321,8 @@ Connection: keep-alive
 		body += model;
 		body += "\",";
 		body += "\"prompt\":\"";
-		body += wh->m;
+		auto m = encode_for_json(wh->m);
+		body += m;
 		body += "\",";
 		std::string id = std::to_string(nid++);
 		body += "\"id\":\"";
@@ -502,6 +537,7 @@ class COPILOT_RAW
 									{
 										if (s->pending_message)
 										{
+											ExecuteCallbacks(s,s->pending_message);
 											if (!s->pending_message->completed_message)
 												s->pending_message->completed_message = std::make_shared<COMPLETED_MESSAGE>();
 											s->pending_message->completed_message->content = data["content"].get<std::string>();
@@ -719,6 +755,7 @@ nlohmann::json AuthStatus()
 
 	void ExecuteCallbacks(std::shared_ptr<COPILOT_SESSION> se,std::shared_ptr<PENDING_MESSAGE> s)
 	{
+		std::lock_guard<std::recursive_mutex> lock(response_mutex);
 		for (size_t im = 0; im < s->reasoning_messages.size(); im++)
 		{
 			if (!s->reasoning_callback)
@@ -730,7 +767,7 @@ nlohmann::json AuthStatus()
 					continue;
 				rm->Ack = 1;
 				std::string r = rm->content;
-				rm->content.clear();
+				//rm->content.clear();
 				auto hr = s->reasoning_callback(r, s->ptr);
 				if (FAILED(hr))
 					Abort(se);
@@ -763,6 +800,7 @@ nlohmann::json AuthStatus()
 		int waited = 0;
 		for (;;)
 		{
+			ExecuteCallbacks(s, msg);
 			if (1)
 			{
 				std::lock_guard<std::recursive_mutex> lock(response_mutex);
@@ -774,7 +812,6 @@ nlohmann::json AuthStatus()
 			if (WaitMs > 0 && waited >= WaitMs)
 				return -1;
 
-			ExecuteCallbacks(s, msg);
 		}
 	}
 
@@ -1036,6 +1073,8 @@ nlohmann::json AuthStatus()
 	{
 		COPILOT_RAW_STATUS s;
 		s.Installed = 1;
+		if (!x)
+			s.Installed = 0;
 		s.folder = cli_path;
 		s.Connected = 1;
 		auto auth = AuthStatus();
@@ -1233,6 +1272,7 @@ nlohmann::json AuthStatus()
 		x = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 		if (x == 0 || x == -1)
 		{
+			x = 0;
 			return;
 		}
 		sockaddr_in sa = { 0 };

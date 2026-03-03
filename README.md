@@ -12,6 +12,9 @@ I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](htt
 # LLama Installation
 Create a folder where [llama-server](https://github.com/ggml-org/llama.cpp/releases) is located.
 
+# Raw installation
+There 's a raw C++ only method  (without the python sdk or python installation) that communicates with copilot.exe directly, see below.
+
 # Ollama 
 Download and run [Ollama](https://ollama.com/), specify to make it visible to the network.
 
@@ -242,6 +245,51 @@ $copilot->kill();
 * You can call AuthState() to get a "true" or "false".
 * You can call `static std::string GetAccessToken(HWND hParent,const char* client_id,const char* client_secret)` to get an access token using the client_id and client_secret from a popup window. 
 
+
+# Raw installation
+```cpp
+#include "raw.hpp"
+
+// Use either a running copilot server 
+//	COPILOT_RAW raw("127.0.0.1", 3000, true);
+
+// Or a new one with your github access token
+//	COPILOT_RAW raw(L"c:\\copilot\\copilot.exe", 3000, "your_token",1);
+
+raw.Ping();
+std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
+raw.Sessions(sessions);
+	
+auto as = raw.AuthStatus();
+auto st = raw.Status();
+auto s1 = raw.CreateSession("gpt-4.1", true);
+//  Ollama also supported
+//	auto s1 = raw.CreateSession("phi:latest", true);
+//	auto s1 = raw.CreateSession("gpt-5-mini", false);
+
+std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
+auto m1 = raw.CreateMessage(s1, "What do you see in this image?", 0, 0, 0, &files);
+auto m2 = raw.CreateMessage(s1, "Please tell me all numbers from 1 to 100", [&](std::string tok, long long ptr) -> HRESULT {
+	std::cout << tok;
+	if (brk)
+	{
+		brk = 0;
+		return E_ABORT;
+	}
+	return S_OK;
+	}, [&](std::string tok, long long ptr) -> HRESULT {
+		std::cout << tok;
+		return S_OK;
+		}, 0);
+raw.Send(s1, m1);
+raw.Send(s1, m2);
+raw.Wait(s1, m2, 60000);
+raw.Wait(s1, m1, 60000);
+```
+
+Caution, this method is more low level and may break if there are changes in the copilot CLI. It also doesn't support all features of the SDK, such as tools and attachments.
+
+
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
@@ -258,5 +306,7 @@ Once CopilotChat is running, you can use the commands:
 * /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
 * /quit or /exit            : Exits the application
  
+CopilotChat supports also --raw in command line parameter (in which case --token is required) to use the raw method without the SDK, for testing the copilot CLI directly. 
+
 # License
 MIT
