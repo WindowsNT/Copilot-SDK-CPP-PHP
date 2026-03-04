@@ -5,6 +5,7 @@ typedef int SOCKET;
 
 #include <sstream>
 #include <wininet.h>
+#include <wincred.h>
 #include "rest.h"
 
 inline static HRESULT OllamaRunning2;
@@ -86,7 +87,7 @@ struct COPILOT_SESSION
 
 	int nid = 1;
 
-	std::vector<std::string> ExtractChunkedResponses(std::vector<char>& b)
+	std::vector<std::string> ExtractChunkedResponses(std::vector<char>& b,bool& F)
 	{
 		// Might not have ContentLength, but instead be chunked with \r\n after each chunk, and end with \r\n0\r\n\r\n
 		/*
@@ -128,8 +129,14 @@ size
 			{
 				// End of chunks
 				b.clear();
+				F = 1;
 				break;
 			}
+
+			// Do we have enough data for the chunk?
+			if (strlen(c1) < chunk_size + 2) // +2 for \r\n after chunk
+				break;
+
 			// go to next line
 			auto c2 = strstr(c1, "{");
 			if (c2 == nullptr)
@@ -146,6 +153,8 @@ size
 				newb.push_back(*chunk_end);
 				chunk_end++;
 			}
+			if (newb.empty())
+				break;
 			b = std::move(newb);
 			if (strlen(b.data()) < 4)
 			{
@@ -204,9 +213,12 @@ size
 			buf.resize(received);
 			pending.insert(pending.end(), buf.begin(), buf.end());
 
+			bool F = 0;
 			auto responses2 = ExtractResponsesFromBuffer(pending);
 			if (responses2.empty())
-				responses2 = ExtractChunkedResponses(pending);
+				responses2 = ExtractChunkedResponses(pending, F);
+			else
+				F = 1;
 			for (auto& r : responses2)
 			{
 				try
@@ -232,7 +244,7 @@ size
 				{
 				}
 			}
-			if (pending_message)
+			if (pending_message && F)
 			{
 				auto m2 = std::make_shared<COMPLETED_MESSAGE>();
 				for (auto& m : pending_message->output_messages)
@@ -373,6 +385,14 @@ Connection: keep-alive
 	}
 };
 
+
+enum struct COPILOT_RAW_MODE
+{
+	INTERACTIVE = 0,
+	PLAN = 1,
+	AUTOPILOT = 2,
+};
+
 class COPILOT_RAW
 {
 	std::string host;
@@ -409,6 +429,7 @@ class COPILOT_RAW
 	bool ready = false;
 
 	std::shared_ptr<std::thread> wait_thread;
+
 
 
 
@@ -605,7 +626,6 @@ class COPILOT_RAW
 				}
 
 				responses.push_back(response);
-				std::lock_guard<std::mutex> lock2(m);
 				ready = true;
 				cv.notify_one();
 			}
@@ -676,6 +696,116 @@ class COPILOT_RAW
 
 public:
 
+
+#pragma comment(lib,"Comctl32.lib")
+	void ShowStatus(HWND hParent, COPILOT_RAW_STATUS* u = 0)
+	{
+		auto st = u ? *u : Status();
+		static bool Reshow = false;
+		auto getst = [&]() -> std::wstring
+			{
+				std::wstring s;
+				if (st.Installed)
+				{
+					s += std::wstring(L"Installed: ") + std::wstring(L"Yes.\r\n");
+					if (st.Connected)
+						s += std::wstring(L"Status: ") + std::wstring(L"Connected.\r\n");
+					else
+						s += std::wstring(L"Status: ") + std::wstring(L"Disconnected.\r\n");
+					if (st.Authenticated)
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Authenticated.\r\n");
+					else
+						s += std::wstring(L"Authentication: ") + std::wstring(L"Not Authenticated.\r\n");
+					s += L"\r\n\r\n";
+					if (!st.models.empty())
+						s += L"Models\r\n----------------------------------------------------\r\n";
+					for (auto& l : st.models)
+					{
+						wchar_t buf[200] = {};
+						swprintf_s(buf, 100, L"%6.2f - %S\r\n", l.rate, l.fullname.c_str());
+						s += buf;
+					}
+				}
+				else
+					s = L"Copilot is not installed.";
+				return s;
+			};
+
+		TASKDIALOGCONFIG tdc = {};
+		tdc.cbSize = sizeof(tdc);
+		tdc.hwndParent = hParent;
+		tdc.dwFlags = TDF_ENABLE_HYPERLINKS;
+		tdc.pszWindowTitle = L"Copilot Status";
+		tdc.pszMainInstruction = L"Copilot Status";
+		auto status = getst();
+		tdc.pszContent = status.c_str();
+		std::wstring footer;
+		if (st.Installed)
+		{
+			footer += L"Copilot <a href=\"https://github.com/settings/copilot/features\">account</a>";
+			footer += L", <a href=\"https://github.com/settings/models\">models";
+			footer += L"</a>, <a href=\"https://github.com/settings/connections/applications";
+			footer += L"\">authorized applications</a>";
+			footer += L".\r\n";
+			footer += L"<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>. ";
+			footer += L"<a href=\"https://www.turbo-play.com/aireport.php\">Report AI Abuse</a>. ";
+			tdc.pszFooter = footer.c_str();
+		}
+		else
+			tdc.pszFooter = L"View your Copilot <a href=\"https://github.com/settings/copilot/features\">account</a> and <a href=\"https://github.com/settings/models\">models</a>.\r\n<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+		TASKDIALOG_BUTTON buttons[10] = {};
+		if (1)
+		{
+			int nid = 0;
+			if (!st.Authenticated && client_id.length() && client_secret.length())
+			{
+				buttons[nid].pszButtonText = L"Authenticate";
+				buttons[nid].nButtonID = 102;
+				nid++;
+			}
+			buttons[nid].pszButtonText = L"Close";
+			buttons[nid].nButtonID = IDCANCEL;
+			tdc.pButtons = buttons;
+			tdc.cButtons = nid + 1;
+		}
+		tdc.lpCallbackData = (LONG_PTR)this;
+
+		tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR xx )->HRESULT
+			{
+				auto p = (COPILOT_RAW*)xx;
+				if (msg == TDN_CREATED)
+				{
+					return S_FALSE;
+				}
+				if (msg == TDN_HYPERLINK_CLICKED)
+				{
+					std::wstring link = (LPCWSTR)lParam;
+					ShellExecute(0, L"open", (const wchar_t*)lParam, 0, 0, SW_SHOW);
+					return S_FALSE;
+				}
+				if (msg == TDN_BUTTON_CLICKED)
+				{
+					int id = (int)wParam;
+					if (id == 102)
+					{
+						// Authenticate
+						if (p->client_id.length() && p->client_secret.length())
+						{
+							auto token = GetAccessToken(hwnd, p->client_id.c_str(), p->client_secret.c_str());
+							void CopReturnedToken(std::string);
+							CopReturnedToken(token);
+							return S_OK;
+						}
+					}
+					if (id == IDCANCEL)
+						return S_OK;
+					return S_FALSE;
+				}
+				return S_OK;
+			};
+		TaskDialogIndirect(&tdc, 0, 0, 0);
+	}
+
 	nlohmann::json Init()
 	{
 		// {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}
@@ -720,6 +850,46 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
+	nlohmann::json Compact(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.compaction.compact";
+		j["params"]["sessionId"] = s->sessionId;
+		return ret(j,true);
+	}
+
+
+	nlohmann::json SetMode(std::shared_ptr<COPILOT_SESSION> s,COPILOT_RAW_MODE m)
+	{
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.mode.set";
+		j["params"]["sessionId"] = s->sessionId;
+		if (m == COPILOT_RAW_MODE::INTERACTIVE)
+			j["params"]["mode"] = "interactive";
+		else if (m == COPILOT_RAW_MODE::PLAN)
+			j["params"]["mode"] = "plan";
+		else if (m == COPILOT_RAW_MODE::AUTOPILOT)
+			j["params"]["mode"] = "autopilot";	
+		auto r = ret(j,true);
+		return r;
+	}
+
+	nlohmann::json Quota()
+	{
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "account.getQuota";
+		auto r = ret(j, true);
+		return r;
+	}
+
 	nlohmann::json DestroySession(std::shared_ptr<COPILOT_SESSION> s)
 	{
 		if (!s)
@@ -751,6 +921,231 @@ nlohmann::json AuthStatus()
 		j["params"]["sessionId"] = s->sessionId;
 		ret(j,false);
 	}
+
+	static void ToClip(HWND hhx, const wchar_t* t, bool Empty)
+	{
+		if (OpenClipboard(hhx))
+		{
+			if (Empty)
+				EmptyClipboard();
+			HGLOBAL hGG = GlobalAlloc(GMEM_FIXED, wcslen(t) * 2 + 100);
+			void* pp = GlobalLock(hGG);
+			wcscpy_s((wchar_t*)pp, wcslen(t) + 10, t);
+			SetClipboardData(CF_UNICODETEXT, hGG);
+			GlobalUnlock(hGG);
+			CloseClipboard();
+		}
+	}
+
+	static bool SaveToken(const wchar_t* token, wchar_t* Target, wchar_t* Username)
+	{
+		CREDENTIAL cred = { 0 };
+		cred.Type = CRED_TYPE_GENERIC;
+		cred.TargetName = Target;
+		cred.CredentialBlobSize = (DWORD)(wcslen(token) * sizeof(wchar_t));
+		cred.CredentialBlob = (LPBYTE)token;
+		cred.Persist = CRED_PERSIST_LOCAL_MACHINE;
+		cred.UserName = Username;
+
+		return CredWrite(&cred, 0);
+	}
+
+
+	static std::wstring LoadToken(const wchar_t* Target)
+	{
+		PCREDENTIAL cred;
+		if (CredRead(Target, CRED_TYPE_GENERIC, 0, &cred))
+		{
+			auto sz = cred->CredentialBlobSize / sizeof(wchar_t);
+			std::wstring r = std::wstring((wchar_t*)cred->CredentialBlob, sz);
+			CredFree(cred);
+			return r;
+		}
+		return L"";
+	}
+
+	static bool DeleteToken(const wchar_t* Target)
+	{
+		if (CredDeleteW(Target, CRED_TYPE_GENERIC, 0))
+			return true;
+		return false;
+	}
+	static std::string GetAccessToken(HWND hParent, const char* client_id, const char* client_secret)
+	{
+		// 1. Request verification code POST https://github.com/login/device/code
+		RESTAPI::REST r;
+		std::wstring acc = L"Accept: application/json";
+		r.Connect(L"github.com", true);
+		std::string d2;
+		d2 += "client_id=";
+		d2 += client_id;
+		d2 += "&";
+		//	d2 += "scope=";
+		//	d2 += ""
+
+		auto r2 = r.RequestWithBuffer(L"/login/device/code", L"POST", { acc }, d2.data(), d2.length());
+		std::vector<char> d;
+		r.ReadToMemory(r2, d);
+		d.resize(d.size() + 1);
+		try
+		{
+			nlohmann::json x = nlohmann::json::parse(d.data());
+
+			struct R
+			{
+				const char* client_id;
+				const char* client_secret;
+				std::string device_code;
+				std::string user_code;
+				nlohmann::json* x;
+				std::string token;
+				bool Cancelled = false;
+				std::shared_ptr<std::thread> j;
+			};
+			R r;
+			r.client_id = client_id;
+			r.client_secret = client_secret;
+			r.x = &x;
+
+			auto verification_uri = x["verification_uri"].get<std::string>();
+			auto device_code = x["device_code"].get<std::string>();
+			auto user_code = x["user_code"].get<std::string>();
+			r.device_code = device_code;
+			r.user_code = user_code;
+
+
+			TASKDIALOGCONFIG tdc = {};
+			tdc.cbSize = sizeof(tdc);
+			tdc.hwndParent = hParent;
+			tdc.dwFlags = TDF_ENABLE_HYPERLINKS | TDF_CALLBACK_TIMER;
+			tdc.pszWindowTitle = L"Copilot Authentication";
+			tdc.pszMainInstruction = L"GitHub Authentication Required";
+			std::wstring str = L"Please authenticate to github by going to\r\n\r\n<a href=\"";
+			str += tou(verification_uri.c_str()) + L"\">";
+			str += tou(verification_uri.c_str());
+			str += L"</a>\r\n\r\nand use the following code:\r\n\r\n";
+			str += tou(user_code.c_str());
+			tdc.pszContent = str.c_str();
+			TASKDIALOG_BUTTON buttons[10] = {};
+			buttons[0].nButtonID = 100;
+			buttons[0].pszButtonText = L"Copy code to clipboard";
+			buttons[1].nButtonID = 101;
+			buttons[1].pszButtonText = L"Go to authentication URL";
+			buttons[2].nButtonID = IDCANCEL;
+			buttons[2].pszButtonText = L"Cancel";
+			tdc.cButtons = 3;
+			tdc.pButtons = buttons;
+			tdc.pfCallback = [](HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam, LONG_PTR lpData) -> HRESULT
+				{
+					R* x = (R*)lpData;
+					if (msg == TDN_TIMER)
+					{
+						if (x->token.length())
+						{
+							SendMessage(hwnd, TDM_CLICK_BUTTON, IDCANCEL, 0);
+							return S_OK;
+						}
+						else
+						{
+							return S_FALSE;
+						}
+					}
+					if (msg == TDN_CREATED)
+					{
+						auto thr = [](R* r)
+							{
+								try
+								{
+									for (int i = 0; i < 100; i++)
+									{
+										// POST https://github.com/login/oauth/access_token
+										RESTAPI::REST r2;
+										r2.Connect(L"github.com", true);
+										std::string d2;
+										d2 += "client_id=";
+										d2 += r->client_id;
+										d2 += "&";
+										d2 += "device_code=";
+										d2 += r->device_code;
+										d2 += "&";
+										d2 += "grant_type=urn:ietf:params:oauth:grant-type:device_code";
+
+										std::wstring acc = L"Accept: application/json";
+										auto r3 = r2.RequestWithBuffer(L"/login/oauth/access_token", L"POST", { acc }, d2.data(), d2.length());
+										std::vector<char> d;
+										r2.ReadToMemory(r3, d);
+										d.resize(d.size() + 1);
+										nlohmann::json root2 = nlohmann::json::parse(d.data());
+										// is there an "access_token" ?
+										if (root2.contains("access_token"))
+										{
+											std::string access_token = root2["access_token"].get<std::string>();
+											r->token = access_token;
+											break;
+										}
+										Sleep(8000);
+										if (r->Cancelled)
+										{
+											break;
+										}
+									}
+								}
+								catch (...)
+								{
+									r->token = " ";
+								}
+							};
+						x->j = std::make_shared<std::thread>(thr, x);
+					}
+					if (msg == TDN_HYPERLINK_CLICKED)
+					{
+						// open the link in default browser
+						ShellExecute(0, L"open", (const wchar_t*)lParam, 0, 0, SW_SHOWNORMAL);
+					}
+					if (msg == TDN_BUTTON_CLICKED)
+					{
+						if (wParam == 100)
+						{
+							std::string user_code = x->user_code;
+							std::wstring wcode = tou(user_code.c_str());
+							ToClip(hwnd, wcode.c_str(), true);
+							return S_FALSE;
+						}
+						if (wParam == 101)
+						{
+							std::string verification_uri = x->x->operator[]("verification_uri").get<std::string>();
+							ShellExecute(0, L"open", tou(verification_uri.c_str()).c_str(), 0, 0, SW_SHOWNORMAL);
+							return S_FALSE;
+						}
+						if (wParam == IDCANCEL)
+						{
+							x->Cancelled = true;
+							x->j->join();
+							return S_OK;
+						}
+					}
+					return S_FALSE;
+				};
+			tdc.lpCallbackData = (LPARAM)&r;
+			TaskDialogIndirect(&tdc, 0, 0, 0);
+
+			if (r.token.length() > 2)
+				return r.token;
+		}
+		catch (...)
+		{
+			return "";
+		}
+		return "";
+	}
+
+	void Authenticate(HWND hwnd = 0)
+	{
+		auto token = GetAccessToken(hwnd, client_id.c_str(), client_secret.c_str());
+		void CopReturnedToken(std::string);
+		CopReturnedToken(token);
+	}
+
 
 
 	void ExecuteCallbacks(std::shared_ptr<COPILOT_SESSION> se,std::shared_ptr<PENDING_MESSAGE> s)
@@ -815,7 +1210,7 @@ nlohmann::json AuthStatus()
 		}
 	}
 
-	std::shared_ptr<PENDING_MESSAGE> CreateMessage(std::shared_ptr<COPILOT_SESSION> s, const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0,std::vector<std::wstring>* atts = 0)
+	std::shared_ptr<PENDING_MESSAGE> CreateMessage(const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0,std::vector<std::wstring>* atts = 0)
 	{
 		auto pm = std::make_shared<PENDING_MESSAGE>();
 		pm->m = message;
@@ -1211,10 +1606,16 @@ nlohmann::json AuthStatus()
 	HANDLE hProcess = 0;
 	int debug = 0;
 	std::wstring cli_path;
-	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token,int Debug)
+	std::string client_id;
+	std::string client_secret;
+	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token,int Debug = 0,const char* clientid = 0,const char* clientsecret = 0)
 	{
 		debug = Debug;
 		DetectOllamaRunning();
+		if (clientid)
+			client_id = clientid;
+		if (clientsecret)
+			client_secret = clientsecret;
 		cli_path = path_to_cli;
 		std::vector<wchar_t> cmd(1000);
 		GUID tok = {};
@@ -1277,7 +1678,7 @@ nlohmann::json AuthStatus()
 		}
 		sockaddr_in sa = { 0 };
 		sa.sin_family = AF_INET;
-		sa.sin_port = htons(port);
+		sa.sin_port = htons((u_short)port);
 #pragma warning(disable:4996)
 		sa.sin_addr.s_addr = inet_addr(host.c_str());
 #pragma warning(default:4996)

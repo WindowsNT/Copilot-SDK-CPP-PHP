@@ -907,6 +907,8 @@ public:
 				footer += L"?client_id=" + tou(cp.client_id.c_str());
 				footer += L"\">authorized applications</a>";
 			}
+			else
+				footer += L"</a>";
 			footer += L".\r\n";
 			if (!Raw)
 			{
@@ -917,7 +919,8 @@ public:
 					footer += L".\r\n";
 			}
 
-			footer += L"<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>.";
+			footer += L"<a href=\"https://www.turbo-play.com/copilot.php\">Learn more</a>. ";
+			footer += L"<a href=\"https://www.turbo-play.com/aireport.php\">Report AI Abuse</a>. ";
 			tdc.pszFooter = footer.c_str();
 		}
 		else

@@ -288,6 +288,7 @@ raw.Wait(s1, m1, 60000);
 ```
 `raw.hpp` contains special version of COPILOT_RAW_STATUS etc. The python-based `copilot.hpp` methods are independent of the raw methods.
 Caution, this method is more low level and may break if there are changes in the copilot CLI. It also doesn't support all features of the SDK, such as tools and attachments.
+It also supports some methods not available in the python sdk like compacting the session.
 
 
 # CopilotChat
@@ -300,11 +301,17 @@ Command line parameters:
 
 
 Once CopilotChat is running, you can use the commands:
-* /install or /update       : Installs or updates Copilot. This downloads binaries available in www.turbo-play.com and runs pip to install prerequisites. 
+* /clipboard                : Pass the clipboard contents to the chat
+* /compact                  : [raw mode] Compact the session
+* /install or /update       : [python mode] Installs or updates Copilot. This downloads binaries available in www.turbo-play.com and runs pip to install prerequisites. 
 * /file <file>              : Add an attachment for next prompt
 * /auth                     : Runs copilot.exe for authentication if needed
 * /models                   : Lists the available models
 * /model <model_name>       : Changes the model to use
+* /restart                  : Restart copilot
+* /skill <folder>           : [python mode] Add a skills directory and restart Copilot
+* /disabledskill <s>        : [python mode] Add a disabled skill and restart Copilot
+* /save <N> <file>          : Save response N to file
 * /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
 * /quit or /exit            : Exits the application
  

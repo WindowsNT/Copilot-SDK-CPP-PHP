@@ -6,6 +6,7 @@
 #include <mutex>
 #include <queue>
 #include <string>
+#include <iomanip>
 #include <sys/types.h>
 #ifdef LINUX
 #include <sys/socket.h>
@@ -16,6 +17,8 @@
 #endif
 #ifdef _WIN32
 #include <winsock2.h>
+#include <CommCtrl.h>
+#include <algorithm>
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "wininet.lib")
 #endif
@@ -62,6 +65,8 @@ int wmain()
 	COPILOT_RAW raw("127.0.0.1", 3000, true);
 //	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token",1);
 	raw.Ping();
+	auto q = raw.Quota();
+	auto d2 = q.dump();
 	std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 	raw.Sessions(sessions);
 	
@@ -69,12 +74,15 @@ int wmain()
 	auto dup = as.dump();
 	auto st = raw.Status();
 	auto s1 = raw.CreateSession("gpt-4.1", true);
+
+//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
+
 //	auto s1 = raw.CreateSession("phi:latest", true);
 //	auto s1 = raw.CreateSession("gpt-5-mini", false);
 //	auto m1 = raw.CreateMessage(s1, "Hello", 0);
 	std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
-	auto m1 = raw.CreateMessage(s1, "What do you see in this image?", 0, 0, 0, &files);
-	auto m2 = raw.CreateMessage(s1, "Please tell me all numbers from 1 to 100", [&](std::string tok, long long ptr) -> HRESULT {
+	auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);
+	auto m2 = raw.CreateMessage("Please tell me how to design a REST system", [&](std::string tok, long long ptr) -> HRESULT {
 		std::cout << tok;
 		if (brk)
 		{
@@ -90,6 +98,7 @@ int wmain()
 	raw.Send(s1, m2);
 	raw.Wait(s1, m2, 60000);
 	raw.Wait(s1, m1, 60000);
+	raw.Compact(s1);
 	__nop();
 }
 
