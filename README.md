@@ -319,7 +319,7 @@ Once CopilotChat is running, you can use the commands:
 * /model <model_name>       : Changes the model to use
 * /restart                  : Restart copilot
 * /skill <folder>           : [python mode] Add a skills directory and restart Copilot
-* /disabledskill <s>        : [python mode] Add a disabled skill and restart Copilot
+* /disabledskill "skill"    : [python mode] Add a disabled skill and restart Copilot
 * /save <N> <file>          : Save response N to file
 * /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
 * /quit or /exit            : Exits the application
