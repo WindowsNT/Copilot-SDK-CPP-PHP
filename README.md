@@ -287,8 +287,17 @@ raw.Wait(s1, m2, 60000);
 raw.Wait(s1, m1, 60000);
 ```
 `raw.hpp` contains special version of COPILOT_RAW_STATUS etc. The python-based `copilot.hpp` methods are independent of the raw methods.
-Caution, this method is more low level and may break if there are changes in the copilot CLI. It also doesn't support all features of the SDK, such as tools and attachments.
-It also supports some methods not available in the python sdk like compacting the session.
+Caution, this method is more low level and may break if there are changes in the copilot CLI. 
+
+Raw mode doesn't yet support:
+* Tools
+* Skills
+
+Raw mode functions that do not exist in the Python SDK:
+* `Compact()` to compact a session
+* `Status()` contains also the account's premium quota percentages and usage
+* `SetMode(...)` to set the current session mode, `COPILOT_RAW_MODE:: INTERACTIVE, PLAN, AUTOPILOT`.
+
 
 
 # CopilotChat
@@ -296,8 +305,8 @@ CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
 * -f <folder> : folder where copilot.exe and python are located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
 * -m <model> : model name,  default is "gpt-5 mini"
-* --token <token> : A github token to use. If not used, the default copilot authentication is used.
-
+* --token <token> : A github token to use. If not used, the default copilot authentication is used. If --raw is used, this is mandatory.
+* --raw : Use the raw mode
 
 
 Once CopilotChat is running, you can use the commands:
@@ -315,7 +324,6 @@ Once CopilotChat is running, you can use the commands:
 * /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
 * /quit or /exit            : Exits the application
  
-CopilotChat supports also --raw in command line parameter (in which case --token is required) to use the raw method without the SDK, for testing the copilot CLI directly. 
 
 # License
 MIT

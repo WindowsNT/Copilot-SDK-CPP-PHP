@@ -17,6 +17,17 @@ struct COMPLETED_MESSAGE
 	std::string reasoningText;
 };
 
+struct COPILOT_RAW_QUOTA
+{
+	int entitlementRequests = 0;
+	int usedRequests = 0;
+	float remainingPercentage = 0.0f;
+	int overage = 0;
+	bool overageAllowedWithExhaustedQuota = 0;
+	std::string resetDate;
+};
+
+
 struct COPILOT_MESSAGE
 {
 	std::string content;
@@ -55,6 +66,7 @@ struct COPILOT_RAW_STATUS
 	bool OllamaInstalled = false;
 	bool Connected = false;
 	bool Authenticated = false;
+	std::map<std::string,COPILOT_RAW_QUOTA> quota;
 	std::vector<COPILOT_RAW_MODEL> models;
 };
 
@@ -725,6 +737,16 @@ public:
 						swprintf_s(buf, 100, L"%6.2f - %S\r\n", l.rate, l.fullname.c_str());
 						s += buf;
 					}
+					// Quota
+					if (st.quota.size() && st.quota.find("premium_interactions") != st.quota.end())
+					{
+						s += L"\r\n\r\nAccount Quota\r\n----------------------------------------------------\r\n";
+						auto& q = st.quota["premium_interactions"];
+						wchar_t buf[200] = {};
+						swprintf_s(buf, 100, L"%6.2f - Premium Percentage Usaged (%d/%d)\r\n", 100.0f - q.remainingPercentage,q.usedRequests,q.entitlementRequests);
+						s += buf;
+					}
+
 				}
 				else
 					s = L"Copilot is not installed.";
@@ -1489,6 +1511,31 @@ nlohmann::json AuthStatus()
 		{
 			auto ollama_models = ollama_list();
 			s.models.insert(s.models.end(), ollama_models.begin(), ollama_models.end());
+		}
+
+
+		auto j = Quota();
+		try
+		{
+			if (j.contains("result"))
+			{
+				// entitlementRequests
+				COPILOT_RAW_QUOTA q;
+				for (auto wh : { "chat","completions","premium_interactions" })
+				{
+					q.entitlementRequests = j["result"]["quotaSnapshots"][wh]["entitlementRequests"].get<int>();
+					q.overage = j["result"]["quotaSnapshots"][wh]["overage"].get<int>();
+					q.usedRequests = j["result"]["quotaSnapshots"][wh]["usedRequests"].get<int>();
+					q.remainingPercentage = j["result"]["quotaSnapshots"][wh]["remainingPercentage"].get<float>();
+					q.overageAllowedWithExhaustedQuota = j["result"]["quotaSnapshots"][wh]["overageAllowedWithExhaustedQuota"].get<bool>();
+					q.resetDate = j["result"]["quotaSnapshots"][wh]["resetDate"].get<std::string>();
+					s.quota[wh] = q;
+				}
+			}
+
+		}
+		catch (...)
+		{
 		}
 		return s;
 	}
