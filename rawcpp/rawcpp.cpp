@@ -31,6 +31,10 @@
 #include "json.hpp"
 #include "raw.hpp"
 
+#pragma comment(linker,"\"/manifestdependency:type='win32' \
+name='Microsoft.Windows.Common-Controls' version='6.0.0.0' \
+processorArchitecture='*' publicKeyToken='6595b64144ccf1df' language='*'\"")
+
 int brk = 0;
 
 
@@ -64,41 +68,91 @@ int wmain()
 #endif
 	COPILOT_RAW raw("127.0.0.1", 3000, true);
 //	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token",1);
-	raw.Ping();
-	auto q = raw.Quota();
-	auto d2 = q.dump();
 	std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 	raw.Sessions(sessions);
-	
-	auto as = raw.AuthStatus();
-	auto dup = as.dump();
-	auto st = raw.Status();
-	auto s1 = raw.CreateSession("gpt-4.1", true);
 
-//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
 
-//	auto s1 = raw.CreateSession("phi:latest", true);
-//	auto s1 = raw.CreateSession("gpt-5-mini", false);
-//	auto m1 = raw.CreateMessage(s1, "Hello", 0);
-	std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
-	auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);
-	auto m2 = raw.CreateMessage("Please tell me how to design a REST system", [&](std::string tok, long long ptr) -> HRESULT {
-		std::cout << tok;
-		if (brk)
-		{
-			brk = 0;
-			return E_ABORT;
-		}
-		return S_OK;
-		}, [&](std::string tok, long long ptr) -> HRESULT {
+
+	raw.Ping();
+	if (1)
+	{
+		auto q = raw.Quota();
+		auto st = raw.Status();
+	}
+
+	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
+
+	// Test file, compact
+	if (0)
+	{
+		auto s1 = raw.CreateSession("gpt-5-mini", false);
+		//	auto s1 = raw.CreateSession("phi:latest", true);
+		std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
+		auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);
+		auto m2 = raw.CreateMessage("Tell me a short joke", [&](std::string tok, long long ptr) -> HRESULT {
 			std::cout << tok;
+			if (brk)
+			{
+				brk = 0;
+				return E_ABORT;
+			}
 			return S_OK;
-			}, 0);
-	raw.Send(s1, m1);
-	raw.Send(s1, m2);
-	raw.Wait(s1, m2, 60000);
-	raw.Wait(s1, m1, 60000);
-	raw.Compact(s1);
+			}, [&](std::string tok, long long ptr) -> HRESULT {
+				std::cout << tok;
+				return S_OK;
+				}, 0);
+			raw.Send(s1, m1);
+			raw.Send(s1, m2);
+			raw.Wait(s1, m2, 60000);
+			raw.Wait(s1, m1, 60000);
+			raw.Compact(s1);
+	}
+
+	// Tool test
+	if (1)
+	{
+		std::vector<COPILOT_TOOL_PARAMETER> params = { {"city","City","City name","string",true}}; // name title description type required
+		raw.AddTool("GetWeather", "Get the current weather for a city", "GetWeatherParams", params, [&](
+			std::string session_id,
+			std::string tool_id,
+			std::vector<std::tuple<std::string, std::any>>& parameters)
+			{
+				nlohmann::json j;
+				for (auto& p : parameters)
+				{
+					std::string name;
+					std::any value;
+					std::tie(name, value) = p;
+					if (name == "city")
+					{
+						j["city"] = std::any_cast<std::string>(value);
+					}
+				}
+				j["condition"] = "Sunny";
+				j["temperature"] = "25C";
+				// Or you can return a direct string, say "It is sunny".
+				return j.dump();
+			});
+		auto s1 = raw.CreateSession("gpt-4.1", false);
+		auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string tok, long long ptr) -> HRESULT {
+			std::cout << tok;
+			if (brk)
+			{
+				brk = 0;
+				return E_ABORT;
+			}
+			return S_OK;
+			}, [&](std::string tok, long long ptr) -> HRESULT {
+				std::cout << tok;
+				return S_OK;
+				}, 0);
+			raw.Send(s1, m2);
+			raw.Wait(s1, m2, 600000);
+			std::string str = m2->completed_message->reasoningText.c_str();
+			str += "\r\n\r\n";
+			str += m2->completed_message->content.c_str();
+			MessageBoxA(0, str.c_str(), "Information", 0);
+	}
 	__nop();
 }
 

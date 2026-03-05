@@ -289,8 +289,53 @@ raw.Wait(s1, m1, 60000);
 `raw.hpp` contains special version of COPILOT_RAW_STATUS etc. The python-based `copilot.hpp` methods are independent of the raw methods.
 Caution, this method is more low level and may break if there are changes in the copilot CLI. 
 
+# Raw tools 
+```cpp
+std::vector<COPILOT_TOOL_PARAMETER> params = { {"city","City","City name","string",true}}; // name title description type required
+raw.AddTool("GetWeather", "Get the current weather for a city", "GetWeatherParams", params, [&](
+	std::string session_id,
+	std::string tool_id,
+	std::vector<std::tuple<std::string, std::any>>& parameters)
+	{
+		nlohmann::json j;
+		for (auto& p : parameters)
+		{
+			std::string name;
+			std::any value;
+			std::tie(name, value) = p;
+			if (name == "city")
+			{
+				j["city"] = std::any_cast<std::string>(value);
+			}
+		}
+		j["condition"] = "Sunny";
+		j["temperature"] = "25C";
+		// Or you can return a direct string, say "It is sunny".
+		return j.dump();
+	});
+auto s1 = raw.CreateSession("gpt-4.1", false);
+auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string tok, long long ptr) -> HRESULT {
+	std::cout << tok;
+	if (brk)
+	{
+		brk = 0;
+		return E_ABORT;
+	}
+	return S_OK;
+	}, [&](std::string tok, long long ptr) -> HRESULT {
+		std::cout << tok;
+		return S_OK;
+		}, 0);
+	raw.Send(s1, m2);
+	raw.Wait(s1, m2, 600000);
+	std::string str = m2->completed_message->reasoningText.c_str();
+	str += "\r\n\r\n";
+	str += m2->completed_message->content.c_str();
+	MessageBoxA(0, str.c_str(), "Information", 0);
+
+```
+
 Raw mode doesn't yet support:
-* Tools
 * Skills
 
 Raw mode functions that do not exist in the Python SDK:
@@ -303,11 +348,10 @@ Raw mode functions that do not exist in the Python SDK:
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
-* -f <folder> : folder where copilot.exe and python are located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
+* -f <folder> : folder where copilot.exe (and python if not raw) is located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
 * -m <model> : model name,  default is "gpt-5 mini"
 * --token <token> : A github token to use. If not used, the default copilot authentication is used. If --raw is used, this is mandatory.
 * --raw : Use the raw mode
-
 
 Once CopilotChat is running, you can use the commands:
 * /clipboard                : Pass the clipboard contents to the chat

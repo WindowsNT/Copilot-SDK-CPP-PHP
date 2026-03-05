@@ -4,6 +4,7 @@ typedef int SOCKET;
 #endif
 
 #include <sstream>
+#include <any>
 #include <wininet.h>
 #include <wincred.h>
 #include "rest.h"
@@ -84,6 +85,27 @@ struct PENDING_MESSAGE
 };
 
 
+struct COPILOT_TOOL_PARAMETER
+{
+	std::string name;
+	std::string title;
+	std::string description;
+	std::string typ;
+	bool Required = false;
+};
+struct COPILOT_TOOL
+{
+	std::string name;
+	std::string description;
+	std::string title;
+	std::vector<COPILOT_TOOL_PARAMETER> parameters;
+	std::function<std::string(
+		std::string session_id,
+		std::string tool_id,
+		std::vector<std::tuple<std::string, std::any>>& parameters
+		)> foo;
+};
+
 struct COPILOT_SESSION
 {
 	SOCKET ollama = 0;
@@ -98,6 +120,8 @@ struct COPILOT_SESSION
 	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
 
 	int nid = 1;
+
+
 
 	std::vector<std::string> ExtractChunkedResponses(std::vector<char>& b,bool& F)
 	{
@@ -282,7 +306,7 @@ size
 	}
 
 
-	std::string encode_for_json(const std::string& s)
+	static std::string encode_for_json(const std::string& s)
 	{
 		std::ostringstream o;
 
@@ -517,6 +541,62 @@ class COPILOT_RAW
 					{
 						r = nlohmann::json::parse(response.c_str(), response.c_str() + response.size());
 
+						if (r.contains("method") && r["method"] == "tool.call")
+						{
+							auto& params = r["params"];
+							auto sessionId = params["sessionId"].get<std::string>();
+							auto toolCallId = params["toolCallId"].get<std::string>();
+							auto toolName = params["toolName"].get<std::string>();
+							std::vector<std::tuple<std::string, std::any>> parameters;
+							for (auto& a : params["arguments"].items())
+							{
+								auto paramName = a.key();
+								std::any paramvalue;
+								// if string or number or bool, store as string, else store as json
+								if (a.value().is_string())
+									paramvalue = a.value().get<std::string>();
+								else if (a.value().is_number())
+									paramvalue = std::to_string(a.value().get<double>());
+								else if (a.value().is_boolean())
+									paramvalue = a.value().get<bool>();
+								else
+									paramvalue = a.value().dump();
+								parameters.push_back({ paramName, paramvalue });
+							}
+
+							for (auto& t : tools)
+							{
+								if (t->name == toolName)
+								{
+									if (t->foo)
+									{
+										auto str = t->foo(sessionId, toolCallId, parameters);
+										// Send immediately {"jsonrpc":"2.0","id":1,"result":{"result":{"textResultForLlm":"...","resultType":"success"}}}
+										nlohmann::json j;
+										j["jsonrpc"] = "2.0";
+										j["id"] = r["id"];
+										// encode str for json
+										//str = COPILOT_SESSION::encode_for_json(str);
+										j["result"]["result"]["textResultForLlm"] = str;
+										j["result"]["result"]["resultType"] = "success";
+										ret(j, false);
+									}
+									break;
+								}
+							}
+						}
+
+						if (r.contains("method") && r["method"] == "permission.request")
+						{
+							// send immediately {"jsonrpc":"2.0","id":0,"result":{"result":{"kind":"approved"}}}
+							nlohmann::json j;
+							j["jsonrpc"] = "2.0";
+							j["id"] = r["id"];
+							j["result"]["result"]["kind"] = "approved";
+							ret(j, false);
+							continue;
+						}
+
 						// see if the method is session.event and if it has params.event.type session.start, if so, extract the sessionId and cwd
 						if (r.contains("method") && r["method"] == "session.event" && r.contains("params") && r["params"].contains("event") && r["params"]["event"].contains("type"))
 						{
@@ -525,6 +605,10 @@ class COPILOT_RAW
 							if (r["params"].contains("sessionId"))
 								sessionId = r["params"]["sessionId"].get<std::string>();
 							std::string evtype = r["params"]["event"]["type"].get<std::string>();
+
+
+						
+
 							if (evtype == "assistant.reasoning_delta")
 							{
 								bool F = 0;
@@ -561,7 +645,7 @@ class COPILOT_RAW
 								if (F)
 									continue;
 							}
-							if (evtype == "assistant.message")
+							if (evtype == "assistant.message" && data.contains("content") && data["content"].get<std::string>().length() > 0)
 							{
 								bool F = 0;
 								for (auto& s : all_sessions)
@@ -705,11 +789,26 @@ class COPILOT_RAW
 		}
 		return nlohmann::json::parse(response.c_str(), response.c_str() + response.size());
 	}
+	std::vector<std::shared_ptr<COPILOT_TOOL>> tools;
 
 public:
 
 
 #pragma comment(lib,"Comctl32.lib")
+	void AddTool(std::string name, std::string desc, std::string title,std::vector<COPILOT_TOOL_PARAMETER> params,std::function<std::string(std::string session_id,
+		std::string tool_id,
+		std::vector<std::tuple<std::string, std::any>>& parameters
+		)> foo)
+	{
+		std::shared_ptr<COPILOT_TOOL> t = std::make_shared<COPILOT_TOOL>();
+		t->name = name;
+		t->description = desc;
+		t->title = title;
+		t->parameters = params;
+		t->foo = foo;
+		tools.push_back(t);
+	}
+
 	void ShowStatus(HWND hParent, COPILOT_RAW_STATUS* u = 0)
 	{
 		auto st = u ? *u : Status();
@@ -828,19 +927,6 @@ public:
 		TaskDialogIndirect(&tdc, 0, 0, 0);
 	}
 
-	nlohmann::json Init()
-	{
-		// {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":1}}
-		if (Headless)
-			return {};
-		nlohmann::json j;
-		j["jsonrpc"] = "2.0";
-		j["id"] = next();
-		j["method"] = "initialize";
-		j["params"]["protocolVersion"] = 1;
-		auto r = ret(j,true);
-		return r;
-	}
 
 nlohmann::json AuthStatus()
 	{
@@ -1607,6 +1693,39 @@ nlohmann::json AuthStatus()
 		params["envValueMode"] = "direct";
 		params["streaming"] = Streaming;
 		j["params"] = params;
+		if (tools.size())
+		{
+			j["params"]["tools"] = nlohmann::json::array();
+			for (auto& t : tools)
+			{
+				nlohmann::json to;
+				to["name"] = t->name;
+				to["description"] = t->description;
+				to["parameters"] = nlohmann::json::object();
+				to["parameters"]["properties"] = nlohmann::json::object();
+				for (auto& p : t->parameters)
+				{
+					to["parameters"]["properties"][p.name] = nlohmann::json::object();
+					to["parameters"]["properties"][p.name]["description"] = p.description;
+					to["parameters"]["properties"][p.name]["title"] = p.title;
+					to["parameters"]["properties"][p.name]["type"] = p.typ;
+				}
+				// Required parameters
+				to["parameters"]["required"] = nlohmann::json::array();
+				for (auto& rp : t->parameters)
+				{
+					if (rp.Required)
+						to["parameters"]["required"].push_back(rp.name);
+				}
+
+				to["parameters"]["type"] = "object";
+				to["parameters"]["title"] = t->title;
+
+				j["params"]["tools"].push_back(to);
+			}
+		}
+
+
 		auto old_num_sessions = all_sessions.size();
 		ret(j,false);
 		for (int tries = 0 ; tries < 100 ; tries++)
