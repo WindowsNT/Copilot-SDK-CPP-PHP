@@ -6,10 +6,10 @@ I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](htt
 This is the new RAW only readme. If you want to see the old readme, open README_old.md.
 
 # Ollama 
-If you want to also uses local models, download and run [Ollama](https://ollama.com/), specify to make it visible to the network. The models will be visible to your C++ code.
+If you want to also use local models, download and run [Ollama](https://ollama.com/), specify to make it visible to the network. The models will be visible to your C++ code.
 
 
-# Example installation
+# Example 
 ```cpp
 #include "raw.hpp"
 
@@ -119,7 +119,7 @@ Raw mode functions that do not exist in the Python SDK:
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
-* -f <folder> : folder where copilot.exe (and python if not raw) is located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, or, if [Turbo Play](https://www.turbo-play.com) is installed, Turbo Play's copilot folder.
+* -f <folder> : folder where copilot.exe (and python if not raw) is located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, 
 * -m <model> : model name,  default is "gpt-5 mini"
 * --token <token> : A github token to use. If not used, the default copilot authentication is used. If --raw is used, this is mandatory.
 * --raw : Use the raw mode
