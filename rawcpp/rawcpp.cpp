@@ -85,7 +85,7 @@ int wmain()
 	// Test file, compact
 	if (0)
 	{
-		auto s1 = raw.CreateSession("gpt-5-mini", false);
+		auto s1 = raw.CreateSession("gpt-5-mini", nullptr);
 		//	auto s1 = raw.CreateSession("phi:latest", true);
 		std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
 		auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);
@@ -133,7 +133,7 @@ int wmain()
 				// Or you can return a direct string, say "It is sunny".
 				return j.dump();
 			});
-		auto s1 = raw.CreateSession("gpt-4.1", false);
+		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
 		auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string tok, long long ptr) -> HRESULT {
 			std::cout << tok;
 			if (brk)

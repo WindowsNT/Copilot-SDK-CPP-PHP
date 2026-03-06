@@ -262,11 +262,17 @@ raw.Sessions(sessions);
 	
 auto as = raw.AuthStatus();
 auto st = raw.Status();
-auto s1 = raw.CreateSession("gpt-4.1", true);
+/*
+struct COPILOT_SESSION_PARAMETERS
+{
+	bool Streaming = true;
+	std::string reasoning_effort;
+	std::string system_message;
+};
+*/
+auto s1 = raw.CreateSession("gpt-4.1", nullptr); // use the default COPILOT_SESSION_PARAMETERS
 //  Ollama also supported
-//	auto s1 = raw.CreateSession("phi:latest", true);
-//	auto s1 = raw.CreateSession("gpt-5-mini", false);
-
+//	auto s1 = raw.CreateSession("phi:latest");
 std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
 auto m1 = raw.CreateMessage(s1, "What do you see in this image?", 0, 0, 0, &files);
 auto m2 = raw.CreateMessage(s1, "Please tell me all numbers from 1 to 100", [&](std::string tok, long long ptr) -> HRESULT {
@@ -313,7 +319,7 @@ raw.AddTool("GetWeather", "Get the current weather for a city", "GetWeatherParam
 		// Or you can return a direct string, say "It is sunny".
 		return j.dump();
 	});
-auto s1 = raw.CreateSession("gpt-4.1", false);
+auto s1 = raw.CreateSession("gpt-4.1");
 auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string tok, long long ptr) -> HRESULT {
 	std::cout << tok;
 	if (brk)
@@ -364,7 +370,9 @@ Once CopilotChat is running, you can use the commands:
 * /restart                  : Restart copilot
 * /skill <folder>           : [python mode] Add a skills directory and restart Copilot
 * /disabledskill "skill"    : [python mode] Add a disabled skill and restart Copilot
+* /quota                    : Show your account quota (raw mode only)
 * /save <N> <file>          : Save response N to file
+* /status                   : Show Copilot Status
 * /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
 * /quit or /exit            : Exits the application
  

@@ -106,6 +106,13 @@ struct COPILOT_TOOL
 		)> foo;
 };
 
+struct COPILOT_SESSION_PARAMETERS
+{
+	bool Streaming = true;
+	std::string reasoning_effort;
+	std::string system_message;
+};
+
 struct COPILOT_SESSION
 {
 	SOCKET ollama = 0;
@@ -120,6 +127,7 @@ struct COPILOT_SESSION
 	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
 
 	int nid = 1;
+	std::any user_data;
 
 
 
@@ -726,9 +734,36 @@ class COPILOT_RAW
 				cv.notify_one();
 			}
 		}
-
+		PendingComplete();
+		x = 0;
 	}
 
+	void PendingComplete(std::shared_ptr<COPILOT_SESSION> s = nullptr)
+	{
+		// All pending messages should be marked as completed with empty content
+		if (!s)
+		{
+			for (auto& j : all_sessions)
+			{
+				PendingComplete(j);
+			}
+			return;
+		}
+		if (s)
+		{
+			if (s->pending_messages.size())
+			{
+				std::lock_guard<std::recursive_mutex> lock(response_mutex);
+				for (auto& m : s->pending_messages)
+				{
+					if (!m->completed_message)
+						m->completed_message = std::make_shared<COMPLETED_MESSAGE>();
+					m->completed_message->content.clear();
+				}
+			}
+		}
+
+	}
 	nlohmann::json ret(nlohmann::json& j,bool w)
 	{
 		auto send = j.dump();
@@ -749,6 +784,8 @@ class COPILOT_RAW
 
 		ssend(send.c_str(), (int)send.length());
 		if (!w)
+			return {};
+		if (!x)
 			return {};
 
 		auto id = j["id"];
@@ -1028,6 +1065,7 @@ nlohmann::json AuthStatus()
 		j["method"] = "session.abort";
 		j["params"]["sessionId"] = s->sessionId;
 		ret(j,false);
+		PendingComplete(s);
 	}
 
 	static void ToClip(HWND hhx, const wchar_t* t, bool Empty)
@@ -1578,6 +1616,8 @@ nlohmann::json AuthStatus()
 		s.Installed = 1;
 		if (!x)
 			s.Installed = 0;
+		if (!s.Installed)
+			return s;
 		s.folder = cli_path;
 		s.Connected = 1;
 		auto auth = AuthStatus();
@@ -1667,8 +1707,11 @@ nlohmann::json AuthStatus()
 		return se;
 	}
 
-	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id,bool Streaming)
+	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id, COPILOT_SESSION_PARAMETERS* sp = 0)
 	{
+		COPILOT_SESSION_PARAMETERS default_params;
+		if (!sp)
+			sp = &default_params;
 		auto models = CopilotModels();
 		bool F = 0;
 		for (auto& m : models)
@@ -1680,7 +1723,7 @@ nlohmann::json AuthStatus()
 			}
 		}
 		if (!F)
-			return CreateOllamaSession(model_id, Streaming);
+			return CreateOllamaSession(model_id, sp->Streaming);
 
 		// {"jsonrpc":"2.0","id":"62587fbb-6596-4144-8014-62403b7d6a97","method":"session.create","params":{"model":"gpt-5-mini","requestPermission":true,"envValueMode":"direct"}}
 		nlohmann::json j;
@@ -1691,7 +1734,11 @@ nlohmann::json AuthStatus()
 		params["model"] = model_id;
 		params["requestPermission"] = true;
 		params["envValueMode"] = "direct";
-		params["streaming"] = Streaming;
+		params["streaming"] = sp->Streaming;
+		if (sp->system_message.length())
+			params["system_message"] = sp->system_message;
+		if (sp->reasoning_effort.length())
+			params["reasoning_effort"] = sp->reasoning_effort;
 		j["params"] = params;
 		if (tools.size())
 		{
