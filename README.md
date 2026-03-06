@@ -3,7 +3,7 @@
 Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and here 's a C++ wrapper around it to be used in Windows. This also allows to use a local LLama-based model through a local llama-server.
 I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare), [FaustChat](https://www.turbo-play.com/copilot.php?from=FaustChat) and other projects.
 
-This is the new RAW only readme. If you want to see the old readme, open README_old.md.
+This is the new RAW only readme.  RAW mode does not require python installed. If you want to see the old readme, open README_old.md.
 
 # Ollama 
 If you want to also use local models, download and run [Ollama](https://ollama.com/), specify to make it visible to the network. The models will be visible to your C++ code.
@@ -54,8 +54,8 @@ raw.Send(s1, m1);
 raw.Send(s1, m2);
 raw.Wait(s1, m2, 60000);
 raw.Wait(s1, m1, 60000);
-raw.DestroySession(s1); // leaves files there
-ra
+raw.DestroySession(s1); // leaves files there so session can be resumed later
+raw.DeleteSession(s1); // deletes session
 ```
 
 # Tools
@@ -107,9 +107,10 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 
 ```
 
-Raw mode doesn't yet support skills
+Raw mode doesn't yet support skills.
 
-Raw mode functions that do not exist in the Python SDK:
+Other functions:
+
 * `Compact()` to compact a session
 * `Status()` contains also the account's premium quota percentages and usage
 * `SetMode(...)` to set the current session mode, `COPILOT_RAW_MODE:: INTERACTIVE, PLAN, AUTOPILOT`.
