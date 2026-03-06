@@ -72,7 +72,6 @@ int wmain()
 	raw.Sessions(sessions);
 
 
-
 	raw.Ping();
 	if (1)
 	{
@@ -83,7 +82,7 @@ int wmain()
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
 
 	// Test file, compact
-	if (0)
+	if (1)
 	{
 		auto s1 = raw.CreateSession("gpt-5-mini", nullptr);
 		//	auto s1 = raw.CreateSession("phi:latest", true);
@@ -109,7 +108,7 @@ int wmain()
 	}
 
 	// Tool test
-	if (1)
+	if (0)
 	{
 		std::vector<COPILOT_TOOL_PARAMETER> params = { {"city","City","City name","string",true}}; // name title description type required
 		raw.AddTool("GetWeather", "Get the current weather for a city", "GetWeatherParams", params, [&](

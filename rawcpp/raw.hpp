@@ -1035,6 +1035,41 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
+	nlohmann::json DeleteSession(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+		{
+			s->OllamaOff();
+			return {};
+		}
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.delete";
+		j["params"]["sessionId"] = s->sessionId;
+		auto r = ret(j, true);
+		s->sessionId.clear();
+		return r;
+	}
+
+	nlohmann::json ResumeSession(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.resume";
+		j["params"]["sessionId"] = s->sessionId;
+		auto r = ret(j, true);
+		return r;
+	}
+
+
 	nlohmann::json DestroySession(std::shared_ptr<COPILOT_SESSION> s)
 	{
 		if (!s)
