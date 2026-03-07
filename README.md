@@ -31,6 +31,8 @@ struct COPILOT_SESSION_PARAMETERS
 	bool Streaming = true;
 	std::string reasoning_effort;
 	std::string system_message;
+	std::vector<std::wstring> skill_dirs;
+	std::vector<std::wstring> disabled_skills;
 };
 */
 auto s1 = raw.CreateSession("gpt-4.1", nullptr); // use the default COPILOT_SESSION_PARAMETERS
@@ -107,8 +109,6 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 
 ```
 
-Raw mode doesn't yet support skills.
-
 Other functions:
 
 * `Compact()` to compact a session
@@ -116,6 +116,7 @@ Other functions:
 * `SetMode(...)` to set the current session mode, `COPILOT_RAW_MODE:: INTERACTIVE, PLAN, AUTOPILOT`.
 * `DeleteSession` and `DestroySession` to delete a session with or without deleting the files used in it. 
 * `ResumeSession` to resume an existing session (get all resumable sessions with `Sessions()`).
+* `SwitchModel` to switch model in an existing session.
 
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.

@@ -72,7 +72,8 @@ int wmain()
 	raw.Sessions(sessions);
 
 
-	raw.Ping();
+	int iVersion = 0;
+	raw.Ping(&iVersion);
 	if (1)
 	{
 		auto q = raw.Quota();
@@ -84,7 +85,7 @@ int wmain()
 	// Test file, compact
 	if (1)
 	{
-		auto s1 = raw.CreateSession("gpt-5-mini", nullptr);
+		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
 		//	auto s1 = raw.CreateSession("phi:latest", true);
 		std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
 		auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);
@@ -105,6 +106,10 @@ int wmain()
 			raw.Wait(s1, m2, 60000);
 			raw.Wait(s1, m1, 60000);
 			raw.Compact(s1);
+			MessageBoxA(0, m1->completed_message->content.c_str(), m2->completed_message->content.c_str(), 0);
+			raw.SwitchModel(s1, "gpt-5-mini");
+			auto single = raw.One(s1, "Another one", 60000);
+			MessageBoxA(0, single.c_str(), "Single", 0);
 	}
 
 	// Tool test

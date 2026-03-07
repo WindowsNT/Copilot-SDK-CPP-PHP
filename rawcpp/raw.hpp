@@ -73,6 +73,7 @@ struct COPILOT_RAW_STATUS
 
 struct PENDING_MESSAGE
 {
+	bool Sent = 0;
 	std::string m;
 	std::vector<std::wstring> attachments;
 	std::string id;
@@ -111,6 +112,8 @@ struct COPILOT_SESSION_PARAMETERS
 	bool Streaming = true;
 	std::string reasoning_effort;
 	std::string system_message;
+	std::vector<std::wstring> skill_dirs;
+	std::vector<std::wstring> disabled_skills;
 };
 
 struct COPILOT_SESSION
@@ -505,20 +508,6 @@ class COPILOT_RAW
 	}
 
 
-	void GoPending(std::shared_ptr<COPILOT_SESSION> s)
-	{
-		if (s->pending_messages.size())
-		{
-			auto pm = s->pending_messages[0];
-			s->pending_messages.erase(s->pending_messages.begin());
-			if (s->pending_message)
-			{
-				s->pending_message = nullptr;
-			}
-			Send(s, pm);
-		}
-	}
-
 	void WaitThread()
 	{
 		std::vector<char> pending;
@@ -671,7 +660,6 @@ class COPILOT_RAW
 												s->pending_message->completed_message->reasoningText = data["reasoningText"].get<std::string>();
 											s->pending_message = 0;
 										}
-										GoPending(s);
 										F = 1;
 										break;
 									}
@@ -685,7 +673,16 @@ class COPILOT_RAW
 								{
 									if (s->sessionId == sessionId)
 									{
-										GoPending(s);
+										// Send the next one
+										std::lock_guard<std::recursive_mutex> lock(response_mutex);
+										if (s->pending_message)
+											s->pending_message = nullptr;
+										if (s->pending_messages.size())
+										{
+											auto pm = s->pending_messages[0];
+											s->pending_messages.erase(s->pending_messages.begin());
+											Send(s, pm);
+										}
 										break;
 									}
 								}
@@ -985,13 +982,17 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
-	nlohmann::json Ping()
+	nlohmann::json Ping(int* pVersion = 0)
 	{
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
 		j["method"] = "ping";
 		auto r = ret(j,true);
+		if (pVersion && r.contains("result") && r["result"].contains("protocolVersion"))
+		{
+			*pVersion = r["result"]["protocolVersion"].get<int>();
+		}
 		return r;
 	}
 
@@ -1051,6 +1052,22 @@ nlohmann::json AuthStatus()
 		j["params"]["sessionId"] = s->sessionId;
 		auto r = ret(j, true);
 		s->sessionId.clear();
+		return r;
+	}
+
+	nlohmann::json SwitchModel(std::shared_ptr<COPILOT_SESSION> s, const char* modelId)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.model.switchTo";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["modelId"] = modelId;
+		auto r = ret(j, true);
 		return r;
 	}
 
@@ -1391,6 +1408,16 @@ nlohmann::json AuthStatus()
 		}
 	}
 
+	std::string One(std::shared_ptr<COPILOT_SESSION> s, const char* message, int WaitMs = 0)
+	{
+		auto pm = CreateMessage(message);
+		Send(s, pm);
+		int r = Wait(s, pm, WaitMs);
+		if (r == 0)
+			return pm->completed_message->content;
+		return "";
+	}
+
 	std::shared_ptr<PENDING_MESSAGE> CreateMessage(const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0,std::vector<std::wstring>* atts = 0)
 	{
 		auto pm = std::make_shared<PENDING_MESSAGE>();
@@ -1473,6 +1500,7 @@ nlohmann::json AuthStatus()
 		}
 		pm->id = j["id"];
 		s->pending_message = pm;
+		pm->Sent = 1;
 		ret(j,false);
 		return;
 	}
@@ -1774,6 +1802,18 @@ nlohmann::json AuthStatus()
 			params["system_message"] = sp->system_message;
 		if (sp->reasoning_effort.length())
 			params["reasoning_effort"] = sp->reasoning_effort;
+		if (sp->skill_dirs.size())
+		{
+			params["skill_directories"] = nlohmann::json::array();
+			for (auto& sd : sp->skill_dirs)
+				params["skill_directories"].push_back(toc(sd.c_str()));
+		}
+		if (sp->disabled_skills.size())
+		{
+			params["disabled_skills"] = nlohmann::json::array();
+			for (auto& ds : sp->disabled_skills)
+				params["disabled_skills"].push_back(toc(ds.c_str()));
+		}
 		j["params"] = params;
 		if (tools.size())
 		{
