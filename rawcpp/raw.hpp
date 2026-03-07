@@ -5,9 +5,43 @@ typedef int SOCKET;
 
 #include <sstream>
 #include <any>
+#include <memory>
+#include <vector>
+#include <thread>
+#include <mutex>
+#include <iomanip>
+#include <condition_variable>
+#include <functional>
+#ifdef _WIN32
 #include <wininet.h>
 #include <wincred.h>
 #include "rest.h"
+#else
+// linux
+#include "json.hpp"
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+typedef int SOCKET;
+typedef int HRESULT;
+void closesocket(int s)
+{
+	close(s);
+}
+#define S_OK 0
+#define E_ABORT -1
+#define SOCKET_ERROR -1
+#define INVALID_SOCKET -1
+#define E_FAIL -2
+#define S_FALSE 1
+#define Sleep(x) usleep((x)*1000)
+#define OutputDebugStringA(x) do { std::cout << x; } while(0)
+#define _stricmp strcasecmp
+#define _strnicmp strncasecmp
+#define FAILED(hr) (((HRESULT)(hr)) < 0)
+#endif
+
 
 inline static HRESULT OllamaRunning2;
 
@@ -63,7 +97,11 @@ struct COPILOT_RAW_STATUS
 {
 	bool StatusValid = false;
 	bool Installed = false;
+#ifdef _WIN32
 	std::wstring folder;
+#else
+	std::string folder;
+#endif
 	bool OllamaInstalled = false;
 	bool Connected = false;
 	bool Authenticated = false;
@@ -75,7 +113,11 @@ struct PENDING_MESSAGE
 {
 	bool Sent = 0;
 	std::string m;
+#ifdef _WIN32
 	std::vector<std::wstring> attachments;
+#else
+	std::vector<std::string> attachments;
+#endif
 	std::string id;
 	std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr;
 	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
@@ -112,8 +154,13 @@ struct COPILOT_SESSION_PARAMETERS
 	bool Streaming = true;
 	std::string reasoning_effort;
 	std::string system_message;
+#ifdef _WIN32
 	std::vector<std::wstring> skill_dirs;
 	std::vector<std::wstring> disabled_skills;
+#else
+	std::vector<std::string> skill_dirs;
+	std::vector<std::string> disabled_skills;
+#endif
 };
 
 struct COPILOT_SESSION
@@ -843,6 +890,7 @@ public:
 		tools.push_back(t);
 	}
 
+#ifdef _WIN32
 	void ShowStatus(HWND hParent, COPILOT_RAW_STATUS* u = 0)
 	{
 		auto st = u ? *u : Status();
@@ -960,7 +1008,7 @@ public:
 			};
 		TaskDialogIndirect(&tdc, 0, 0, 0);
 	}
-
+#endif
 
 nlohmann::json AuthStatus()
 	{
@@ -1120,6 +1168,7 @@ nlohmann::json AuthStatus()
 		PendingComplete(s);
 	}
 
+#ifdef _WIN32
 	static void ToClip(HWND hhx, const wchar_t* t, bool Empty)
 	{
 		if (OpenClipboard(hhx))
@@ -1168,6 +1217,7 @@ nlohmann::json AuthStatus()
 			return true;
 		return false;
 	}
+
 	static std::string GetAccessToken(HWND hParent, const char* client_id, const char* client_secret)
 	{
 		// 1. Request verification code POST https://github.com/login/device/code
@@ -1343,6 +1393,7 @@ nlohmann::json AuthStatus()
 		void CopReturnedToken(std::string);
 		CopReturnedToken(token);
 	}
+#endif
 
 
 
@@ -1418,7 +1469,12 @@ nlohmann::json AuthStatus()
 		return "";
 	}
 
-	std::shared_ptr<PENDING_MESSAGE> CreateMessage(const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0,std::vector<std::wstring>* atts = 0)
+
+#ifdef _WIN32
+	std::shared_ptr<PENDING_MESSAGE> CreateMessage(const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0, std::vector<std::wstring>* atts = 0)
+#else
+	std::shared_ptr<PENDING_MESSAGE> CreateMessage(const char* message, std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr, std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr, long long ptr = 0, std::vector<std::string>* atts = 0)
+#endif
 	{
 		auto pm = std::make_shared<PENDING_MESSAGE>();
 		pm->m = message;
@@ -1628,6 +1684,7 @@ nlohmann::json AuthStatus()
 	}
 
 
+#ifdef _WIN32
 	static std::vector<COPILOT_RAW_MODEL> ollama_list()
 	{
 		//http://localhost:11434/api/tags
@@ -1654,6 +1711,7 @@ nlohmann::json AuthStatus()
 		}
 		return models;
 	}
+#endif
 
 	std::vector<COPILOT_RAW_MODEL> CopilotModels()
 	{
@@ -1672,6 +1730,12 @@ nlohmann::json AuthStatus()
 		}
 		return models;
 	}
+
+#ifdef _WIN32
+	std::wstring cli_path;
+#else
+	std::string cli_path;
+#endif
 
 	COPILOT_RAW_STATUS Status()
 	{
@@ -1696,11 +1760,13 @@ nlohmann::json AuthStatus()
 		}
 
 		s.models = CopilotModels();
+#ifdef _WIN32
 		if (OllamaRunning2 == S_OK)
 		{
 			auto ollama_models = ollama_list();
 			s.models.insert(s.models.end(), ollama_models.begin(), ollama_models.end());
 		}
+#endif
 
 
 		auto j = Quota();
@@ -1730,6 +1796,7 @@ nlohmann::json AuthStatus()
 	}
 
 
+#ifdef _WIN32
 	std::shared_ptr<COPILOT_SESSION> CreateOllamaSession(const char* model_id, bool Streaming)
 	{
 		if (OllamaRunning2 != S_OK)
@@ -1769,6 +1836,7 @@ nlohmann::json AuthStatus()
 		se->OllamaThread = std::make_shared<std::thread>(&COPILOT_SESSION::OllThread, se.get());
 		return se;
 	}
+#endif
 
 	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id, COPILOT_SESSION_PARAMETERS* sp = 0)
 	{
@@ -1785,8 +1853,13 @@ nlohmann::json AuthStatus()
 				break;
 			}
 		}
+#ifdef _WIN32
 		if (!F)
 			return CreateOllamaSession(model_id, sp->Streaming);
+#else
+		if (!F)
+			return nullptr;
+#endif
 
 		// {"jsonrpc":"2.0","id":"62587fbb-6596-4144-8014-62403b7d6a97","method":"session.create","params":{"model":"gpt-5-mini","requestPermission":true,"envValueMode":"direct"}}
 		nlohmann::json j;
@@ -1864,6 +1937,22 @@ nlohmann::json AuthStatus()
 		return nullptr;
 	}
 
+#ifndef _WIN32
+	static std::string tou(const char* s)
+	{
+		return s;
+	}
+	static std::string toc(const char* s)
+	{
+		return s;
+	}
+	static std::string ChangeSlash(const char* s)
+	{
+		return s;
+	}
+
+
+#endif
 
 
 #ifdef _WIN32
@@ -1893,10 +1982,13 @@ nlohmann::json AuthStatus()
 
 	HANDLE hProcess = 0;
 	int debug = 0;
-	std::wstring cli_path;
 	std::string client_id;
 	std::string client_secret;
-	COPILOT_RAW(const wchar_t* path_to_cli, int port,const char* auth_token,int Debug = 0,const char* clientid = 0,const char* clientsecret = 0)
+#ifndef _WIN32
+	COPILOT_RAW(const char* path_to_cli, int port, const char* auth_token, int Debug = 0, const char* clientid = 0, const char* clientsecret = 0)
+#else
+	COPILOT_RAW(const wchar_t* path_to_cli, int port, const char* auth_token, int Debug = 0, const char* clientid = 0, const char* clientsecret = 0)
+#endif
 	{
 		debug = Debug;
 		DetectOllamaRunning();
@@ -1916,7 +2008,7 @@ nlohmann::json AuthStatus()
 
 		swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli,toks.data(), port);
 		if (debug == 2)
-			swprintf_s(cmd.data(), 1000, L"cmd.exe /L \"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli, toks.data(), port);
+			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level all --headless", path_to_cli, toks.data(), port);
 		PROCESS_INFORMATION pi = {};
 		STARTUPINFO si = {};
 		si.cb = sizeof(STARTUPINFO);
