@@ -4,6 +4,7 @@ Github released the [Copilot SDK](https://github.com/github/copilot-sdk) and her
 I'm already using it in [Turbo Play](https://www.turbo-play.com), [TurboIRC](https://apps.microsoft.com/detail/9PCQMH46GRQX?hl=en&gl=GR&ocid=pdpshare), [FaustChat](https://www.turbo-play.com/copilot.php?from=FaustChat) and other projects.
 
 This is the new RAW only readme.  RAW mode does not require python installed. If you want to see the old readme, open README_old.md.
+Raw.hpp also compiles in linux with g++.
 
 # Ollama 
 If you want to also use local models, download and run [Ollama](https://ollama.com/), specify to make it visible to the network. The models will be visible to your C++ code.
