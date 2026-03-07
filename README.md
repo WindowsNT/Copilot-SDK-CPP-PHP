@@ -145,32 +145,30 @@ Once CopilotChat is running, you can use the commands:
  
 
 # PHP
-For running with PHP in a typical Linux PHP stack you do
-* Install python and the copilot sdk with pip as before
-* Put copilot CLI in a folder and make sure it's executable
-* Run python server: 
-```bash
-python copilotworker.py
-```
-* Change the parameters in copilotworker.py to match your installation
-```python
-PORT = 8765
-CLI_PATH = "/root/copilot"
-```
-* require "copilot.php" in your PHP code
+Just require "cop.php" in your PHP code. You do not need python.
 
 ```PHP
 <?php
-require_once "copilot.php";
-$copilot = new Copilot("gpt-4.1",8765); 
-echo $copilot->send("/models");
-echo '<br><br>';
-echo $copilot->send("/state");
-echo '<br><br>';
-echo $copilot->send("/authstate");
-echo '<br><br>';
-echo $copilot->ask("What is the capital of France?");
-$copilot->kill();
+require_once "cop.php";
+
+$cop = new Copilot("your_token","/usr/local/bin/copilot",8765);
+// or
+$cop = new Copilot("","",8765); // run with an existing server
+$m1 = $cop->Ping();
+$m1 = $cop->AuthStatus();
+$m1 = $cop->Quota();
+$m1 = $cop->Sessions();
+
+$s1 = new COPILOT_SESSION_PARAMETERS();
+$s1->Streaming = true;
+$s1->system_message = "You are a helpful assistant for testing the copilot cli.";
+$session_id = $cop->CreateSession("gpt-4.1",$s1,true);
+printf("Session ID: %s\n",$session_id); 
+// Send message
+$m1 = $cop->Prompt($session_id,"What is the capital of France?",true);
+// End session
+$x1 = $cop->EndSession($session_id,true);
+
 ?>
 ```
 
