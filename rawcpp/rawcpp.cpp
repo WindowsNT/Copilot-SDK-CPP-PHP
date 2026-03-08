@@ -66,7 +66,7 @@ int wmain()
 	SetConsoleOutputCP(CP_UTF8);
 
 #endif
-	COPILOT_RAW raw("127.0.0.1", 3000, true);
+	COPILOT_RAW raw("127.0.0.1", 3000);
 //	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token",1);
 	std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 	raw.Sessions(sessions);
@@ -119,7 +119,8 @@ int wmain()
 			raw.Wait(s1, m2, 60000);
 			raw.Wait(s1, m1, 60000);
 			raw.Compact(s1);
-			MessageBoxA(0, m1->completed_message->content.c_str(), m2->completed_message->content.c_str(), 0);
+			if (m1->completed_message && m2->completed_message)
+				MessageBoxA(0, m1->completed_message->content.c_str(), m2->completed_message->content.c_str(), 0);
 			raw.SwitchModel(s1, "gpt-5-mini");
 			auto single = raw.One(s1, "Another one", 60000);
 			MessageBoxA(0, single.c_str(), "Single", 0);

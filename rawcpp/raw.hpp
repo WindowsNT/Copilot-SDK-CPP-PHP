@@ -493,7 +493,6 @@ class COPILOT_RAW
 	int port = 0;
 	SOCKET x = 0;
 	int nid = 1;
-	bool Headless = 1;
 
 	std::vector<std::shared_ptr<COPILOT_SESSION>> all_sessions;
 
@@ -814,15 +813,12 @@ public:
 	nlohmann::json ret(nlohmann::json& j,bool w)
 	{
 		auto send = j.dump();
-		if (!Headless)
-			send += "\n";
 #ifdef _DEBUG
 		OutputDebugStringA(send.c_str());
-		if (Headless)
-			OutputDebugStringA("\n");
+		OutputDebugStringA("\n");
 #endif
 
-		if (Headless)
+		if (1)
 		{
 			// Must also send Content-Length: XXX \r\ndata
 			std::string header = "Content-Length: " + std::to_string(send.length()) + "\r\n\r\n";
@@ -1570,9 +1566,7 @@ nlohmann::json AuthStatus()
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
-		j["method"] = "session/list";
-		if (Headless)
-			j["method"] = "session.list";
+		j["method"] = "session.list";
 		j["params"] = nlohmann::json::object();
 		auto r = ret(j,true);
 
@@ -2044,7 +2038,6 @@ nlohmann::json AuthStatus()
 		hProcess = pi.hProcess;
 		if (pi.hThread)
 			CloseHandle(pi.hThread);
-		Headless = true;
 		host = "127.0.0.1";
 		this->port = port;
 		Start();
@@ -2077,9 +2070,8 @@ nlohmann::json AuthStatus()
 
 	}
 
-	COPILOT_RAW(const char* ip, int port,bool hl)
+	COPILOT_RAW(const char* ip, int port)
 	{
-		Headless = hl;
 		DetectOllamaRunning();
 		host = ip;
 		this->port = port;
