@@ -86,6 +86,19 @@ int wmain()
 	if (1)
 	{
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+
+		// Test raw API
+		if (0)
+		{
+			// some raw stuff
+			nlohmann::json j;
+			j["jsonrpc"] = "2.0";
+			j["id"] = raw.next();
+			j["method"] = "session.agent.list";
+			j["params"]["sessionId"] = s1->sessionId;
+			auto r = raw.ret(j, true);
+		}
+
 		//	auto s1 = raw.CreateSession("phi:latest", true);
 		std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
 		auto m1 = raw.CreateMessage("What do you see in this image?", 0, 0, 0, &files);

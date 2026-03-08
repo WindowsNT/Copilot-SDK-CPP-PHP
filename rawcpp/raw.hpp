@@ -495,10 +495,6 @@ class COPILOT_RAW
 	int nid = 1;
 	bool Headless = 1;
 
-	std::string next()
-	{
-		return std::to_string(nid++);
-	}
 	std::vector<std::shared_ptr<COPILOT_SESSION>> all_sessions;
 
 
@@ -808,6 +804,13 @@ class COPILOT_RAW
 		}
 
 	}
+public:
+
+	std::string next()
+	{
+		return std::to_string(nid++);
+	}
+
 	nlohmann::json ret(nlohmann::json& j,bool w)
 	{
 		auto send = j.dump();
