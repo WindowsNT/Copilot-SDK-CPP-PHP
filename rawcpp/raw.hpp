@@ -70,28 +70,28 @@ struct COPILOT_MESSAGE
 
 };
 
+
 struct COPILOT_RAW_SDK_MODEL
 {
 	std::string id;
-	std::string name;
+	std::string fullname;
 	bool SupportsVision = false;
 	std::vector<std::string> supportedvisionmediatypes;
+	std::vector<std::string> supportedreasoningefforts;
 	int MaxPromptTokens = 0;
 	int MaxContextWindowTokens = 0;
 	int MaxPromptImages = 0;
 	int MaxPromptImageSize = 0;
+	bool adaptive_thinking = 0;
+	bool tool_calls = 0;
+	bool reasoningEffort = 0;
+	bool structured_outputs = 0;
+	bool streaming = 1;
 	std::string Terms;
-	float BillingMultiplier = 0.0f;
-};
-
-struct COPILOT_RAW_MODEL
-{
-	std::string id;
-	std::string fullname;
 	float rate = 0.0f;
-	bool SupportsVision = 0;
 	bool Ollama = 0;
 };
+
 
 struct COPILOT_RAW_STATUS
 {
@@ -106,7 +106,7 @@ struct COPILOT_RAW_STATUS
 	bool Connected = false;
 	bool Authenticated = false;
 	std::map<std::string,COPILOT_RAW_QUOTA> quota;
-	std::vector<COPILOT_RAW_MODEL> models;
+	std::vector<COPILOT_RAW_SDK_MODEL> models;
 };
 
 struct PENDING_MESSAGE
@@ -161,6 +161,7 @@ struct COPILOT_SESSION_PARAMETERS
 	std::vector<std::string> skill_dirs;
 	std::vector<std::string> disabled_skills;
 #endif
+	bool Infinite = true;
 };
 
 struct COPILOT_SESSION
@@ -923,7 +924,7 @@ public:
 						s += L"\r\n\r\nAccount Quota\r\n----------------------------------------------------\r\n";
 						auto& q = st.quota["premium_interactions"];
 						wchar_t buf[200] = {};
-						swprintf_s(buf, 100, L"%6.2f - Premium Percentage Usaged (%d/%d)\r\n", 100.0f - q.remainingPercentage,q.usedRequests,q.entitlementRequests);
+						swprintf_s(buf, 100, L"%6.2f%% - Premium Percentage Usaged (%d/%d)\r\n", 100.0f - q.remainingPercentage,q.usedRequests,q.entitlementRequests);
 						s += buf;
 					}
 
@@ -1542,6 +1543,9 @@ nlohmann::json AuthStatus()
 		j["method"] = "session.send";
 		j["params"]["sessionId"] = s->sessionId;
 		j["params"]["prompt"] = pm->m;
+
+
+
 		if (pm->attachments.size())
 		{
 			j["params"]["attachments"] = nlohmann::json::array();
@@ -1597,14 +1601,39 @@ nlohmann::json AuthStatus()
 			{
 				COPILOT_RAW_SDK_MODEL m;
 				m.id = item["id"].get<std::string>();
-				m.name = item["name"].get<std::string>();
+				m.fullname = item["name"].get<std::string>();
 				if (item.contains("capabilities") && item["capabilities"].contains("limits"))
 				{
-					auto& limits = item["capabilities"]["limits"];
+					auto& capabilities = item["capabilities"];
+					auto& limits = capabilities["limits"];
 					if (limits.contains("max_prompt_tokens"))
 						m.MaxPromptTokens = limits["max_prompt_tokens"].get<int>();
 					if (limits.contains("max_context_window_tokens"))
 						m.MaxContextWindowTokens = limits["max_context_window_tokens"].get<int>();
+					if (capabilities.contains("supports"))
+					{
+						auto& supports = capabilities["supports"];
+						if (supports.contains("adaptive_thinking"))
+							m.adaptive_thinking = supports["adaptive_thinking"].get<bool>();
+						if (supports.contains("tool_calls"))
+							m.tool_calls = supports["tool_calls"].get<bool>();
+						if (supports.contains("reasoningEffort"))
+							m.reasoningEffort = supports["reasoningEffort"].get<bool>();
+						if (supports.contains("structured_outputs"))
+							m.structured_outputs = supports["structured_outputs"].get<bool>();
+						if (supports.contains("streaming"))
+							m.streaming = supports["streaming"].get<bool>();
+					}
+					if (item.contains("supportedReasoningEfforts"))
+					{
+						// array
+						auto& efforts = item["supportedReasoningEfforts"];
+						for (auto& e : efforts)
+						{
+							std::string es = e.get<std::string>();
+							m.supportedreasoningefforts.push_back(es);
+						}
+					}
 					if (limits.contains("vision"))
 					{
 						auto& vision = limits["vision"];
@@ -1629,7 +1658,7 @@ nlohmann::json AuthStatus()
 
 					// billing multiplier
 					if (item.contains("billing") && item["billing"].contains("multiplier"))
-						m.BillingMultiplier = item["billing"]["multiplier"].get<float>();
+						m.rate = item["billing"]["multiplier"].get<float>();
 
 					models.push_back(m);
 				}
@@ -1682,7 +1711,7 @@ nlohmann::json AuthStatus()
 
 
 #ifdef _WIN32
-	static std::vector<COPILOT_RAW_MODEL> ollama_list()
+	static std::vector<COPILOT_RAW_SDK_MODEL> ollama_list()
 	{
 		//http://localhost:11434/api/tags
 		RESTAPI::REST r;
@@ -1695,11 +1724,11 @@ nlohmann::json AuthStatus()
 			return {};
 		std::string s(dd.data(), dd.size());
 		auto jx = nlohmann::json::parse(s);
-		std::vector<COPILOT_RAW_MODEL> models;
+		std::vector<COPILOT_RAW_SDK_MODEL> models;
 		for (auto& item : jx["models"])
 		{
 			std::string name = item["model"];
-			COPILOT_RAW_MODEL m;
+			COPILOT_RAW_SDK_MODEL m;
 			m.id = name;
 			m.fullname = name;
 			m.rate = 0.0f;
@@ -1710,22 +1739,11 @@ nlohmann::json AuthStatus()
 	}
 #endif
 
-	std::vector<COPILOT_RAW_MODEL> CopilotModels()
+	std::vector<COPILOT_RAW_SDK_MODEL> CopilotModels()
 	{
 		auto mod = ModelList();
 		auto sdk_models = ModelsFromJ(mod["result"]["models"].dump());
-		std::vector<COPILOT_RAW_MODEL> models;
-		for (const auto& sdk_model : sdk_models)
-		{
-			COPILOT_RAW_MODEL m;
-			m.fullname = sdk_model.name;
-			m.id = sdk_model.id;
-			m.rate = sdk_model.BillingMultiplier;
-			m.SupportsVision = sdk_model.SupportsVision;
-			m.Ollama = 0;
-			models.push_back(m);
-		}
-		return models;
+		return sdk_models;
 	}
 
 #ifdef _WIN32
@@ -1865,6 +1883,12 @@ nlohmann::json AuthStatus()
 		j["method"] = "session.create";
 		auto params = nlohmann::json::object();
 		params["model"] = model_id;
+		if (sp->Infinite == false)
+		{
+			// "infinite_sessions": {"enabled": False},
+			params["infinite_sessions"] = nlohmann::json::object();
+			params["infinite_sessions"]["enabled"] = false;
+		}
 		params["requestPermission"] = true;
 		params["envValueMode"] = "direct";
 		params["streaming"] = sp->Streaming;
@@ -2006,6 +2030,8 @@ nlohmann::json AuthStatus()
 		swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level info --headless", path_to_cli,toks.data(), port);
 		if (debug == 2)
 			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level all --headless", path_to_cli, toks.data(), port);
+		if (debug == 100)
+			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --log-level all", path_to_cli, toks.data());
 		PROCESS_INFORMATION pi = {};
 		STARTUPINFO si = {};
 		si.cb = sizeof(STARTUPINFO);

@@ -74,11 +74,7 @@ int wmain()
 
 	int iVersion = 0;
 	raw.Ping(&iVersion);
-	if (1)
-	{
-		auto q = raw.Quota();
-		auto st = raw.Status();
-	}
+	auto st = raw.Status();
 
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
 
