@@ -1463,6 +1463,8 @@ nlohmann::json AuthStatus()
 	{
 		auto pm = CreateMessage(message);
 		Send(s, pm);
+		if (WaitMs == 0)
+			return "";
 		int r = Wait(s, pm, WaitMs);
 		if (r == 0)
 			return pm->completed_message->content;
