@@ -162,6 +162,8 @@ struct COPILOT_SESSION_PARAMETERS
 	std::vector<std::string> disabled_skills;
 #endif
 	bool Infinite = true;
+	std::function<void(nlohmann::json& j, std::string& resp, bool& free_form,long long cb)> user_ask_function;
+	long long ask_function_callback = 0;
 };
 
 struct COPILOT_SESSION
@@ -550,6 +552,17 @@ class COPILOT_RAW
 		return rs;
 	}
 
+	void Log(const char* s)
+	{
+#ifdef _DEBUG
+		OutputDebugStringA(s);
+		OutputDebugStringA("\n");
+#endif
+		auto lf = LogF;
+		if (lf)
+			lf(s);
+	}
+
 
 	void WaitThread()
 	{
@@ -568,10 +581,7 @@ class COPILOT_RAW
 			for (auto response : responses2)
 			{
 				std::lock_guard<std::recursive_mutex> lock(response_mutex);
-#ifdef _DEBUG
-				OutputDebugStringA(response.c_str());
-				OutputDebugStringA("\n");
-#endif
+				Log(response.c_str());
 
 				// Parse response for "method" session.event
 				if (1)
@@ -626,12 +636,34 @@ class COPILOT_RAW
 							}
 						}
 
+						if (r.contains("method") && r["method"] == "userInput.request")
+						{
+							auto& params = r["params"];
+							auto sessionId = params["sessionId"].get<std::string>();
+							auto question = params["question"].get<std::string>();
+							auto allowFreeform = params["allowFreeform"].get<bool>();
+							std::string respo;
+							if (AskUser)
+								AskUser(r, respo, allowFreeform,AskUserCallback);
+							else
+								DefaultAskUser(r, respo, allowFreeform,AskUserCallback);
+							nlohmann::json j;
+							j["jsonrpc"] = "2.0";
+							if (r.contains("id"))
+								j["id"] = r["id"];
+							j["result"]["answer"] = respo;
+							j["result"]["wasFreeform"] = true;
+							ret(j, false);
+							continue;
+						}
+
 						if (r.contains("method") && r["method"] == "permission.request")
 						{
 							// send immediately {"jsonrpc":"2.0","id":0,"result":{"result":{"kind":"approved"}}}
 							nlohmann::json j;
 							j["jsonrpc"] = "2.0";
-							j["id"] = r["id"];
+							if (r.contains("id"))
+								j["id"] = r["id"];
 							j["result"]["result"]["kind"] = "approved";
 							ret(j, false);
 							continue;
@@ -640,12 +672,54 @@ class COPILOT_RAW
 						// see if the method is session.event and if it has params.event.type session.start, if so, extract the sessionId and cwd
 						if (r.contains("method") && r["method"] == "session.event" && r.contains("params") && r["params"].contains("event") && r["params"]["event"].contains("type"))
 						{
-							auto data = r["params"]["event"]["data"];
+							auto& event = r["params"]["event"];
+							auto& data = event["data"];
 							std::string sessionId, cwd;
 							if (r["params"].contains("sessionId"))
 								sessionId = r["params"]["sessionId"].get<std::string>();
-							std::string evtype = r["params"]["event"]["type"].get<std::string>();
+							std::string evtype = event["type"].get<std::string>();
 
+							if (evtype == "user_input.requested")
+							{
+
+							}
+							if (evtype == "permission.requested")
+							{
+								nlohmann::json j;
+								j["jsonrpc"] = "2.0";
+								j["method"] = "session.permissions.handlePendingPermissionRequest";
+								j["id"] = next();
+								j["params"]["requestId"] = data["requestId"].get<std::string>();
+								j["params"]["result"]["kind"] = "approved";
+								j["params"]["sessionId"] = sessionId;
+								ret(j, false);
+
+
+/*								nlohmann::json j;
+								j["jsonrpc"] = "2.0";
+								if (r.contains("id"))
+								{
+									j["id"] = r["id"];
+									j["result"]["result"]["kind"] = "approved";
+									ret(j, false);
+								}
+								else
+								if (data.contains("requestId"))
+								{
+									j["id"] = data["requestId"].get<std::string>();
+									j["result"]["result"]["kind"] = "approved";
+									ret(j, false);
+								}
+								else
+								if (event.contains("id"))
+								{
+									j["id"] = event["id"].get<std::string>();
+									j["result"]["result"]["kind"] = "approved";
+									ret(j, false);
+								}
+*/
+								continue;
+							}
 
 						
 
@@ -661,6 +735,8 @@ class COPILOT_RAW
 										if (s->pending_message)
 											s->pending_message->reasoning_messages.push_back(m);
 										F = 1;
+										if (s->pending_message)
+											ExecuteCallbacks(s, s->pending_message);
 										break;
 									}
 								}
@@ -679,6 +755,8 @@ class COPILOT_RAW
 										if (s->pending_message)
 											s->pending_message->output_messages.push_back(m);
 										F = 1;
+										if (s->pending_message)
+											ExecuteCallbacks(s, s->pending_message);
 										break;
 									}
 								}
@@ -804,7 +882,30 @@ class COPILOT_RAW
 		}
 
 	}
+
+	std::function<void(const char*)> LogF;
+	std::function<void(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)> AskUser;
+	long long AskUserCallback = 0;
+
+	void DefaultAskUser(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)
+	{
+		response = "No response";
+		FreeForm = true;
+	}
+
 public:
+
+
+
+	void SetLogFunction(std::function<void(const char*)> f)
+	{
+		LogF = f;
+	}
+	void SetAskUserFunction(std::function<void(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)> f,long long ca)
+	{
+		AskUserCallback = ca;
+		AskUser = f;
+	}
 
 	std::string next()
 	{
@@ -814,10 +915,7 @@ public:
 	nlohmann::json ret(nlohmann::json& j,bool w)
 	{
 		auto send = j.dump();
-#ifdef _DEBUG
-		OutputDebugStringA(send.c_str());
-		OutputDebugStringA("\n");
-#endif
+		Log(send.c_str());
 
 		if (1)
 		{
@@ -1892,6 +1990,11 @@ nlohmann::json AuthStatus()
 			params["infinite_sessions"]["enabled"] = false;
 		}
 		params["requestPermission"] = true;
+		if (sp->user_ask_function)
+		{
+			SetAskUserFunction(sp->user_ask_function,sp->ask_function_callback);
+			params["requestUserInput"] = true;
+		}
 		params["envValueMode"] = "direct";
 		params["streaming"] = sp->Streaming;
 		if (sp->system_message.length())

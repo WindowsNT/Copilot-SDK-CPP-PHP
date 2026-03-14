@@ -78,8 +78,8 @@ int wmain()
 
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
 
-	// Test file, compact
-	if (1)
+	// Test file input and session compact
+	if (0)
 	{
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
 
@@ -120,6 +120,21 @@ int wmain()
 			raw.SwitchModel(s1, "gpt-5-mini");
 			auto single = raw.One(s1, "Another one", 60000);
 			MessageBoxA(0, single.c_str(), "Single", 0);
+	}
+
+	// User input test
+	if (1)
+	{
+		COPILOT_SESSION_PARAMETERS spp;
+		spp.user_ask_function = [&](nlohmann::json& j, std::string& resp, bool& free_form,long long cb) -> void {
+			// auto question = j["params"]["question"].get<std::string>();
+			// auto choices = j["params"]["choices"].get<std::vector<std::string>>();
+			// auto free_form = j["params"]["free_form"].get<bool>();
+			resp = "My name is Michael";
+			};
+		auto s1 = raw.CreateSession("gpt-4.1", &spp);
+		auto r = raw.One(s1, "Ask the user his name", 60000);
+		MessageBoxA(0, r.c_str(), "Information", 0);
 	}
 
 	// Tool test

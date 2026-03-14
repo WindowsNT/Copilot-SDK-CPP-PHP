@@ -34,9 +34,12 @@ struct COPILOT_SESSION_PARAMETERS
 	std::string system_message;
 	std::vector<std::wstring> skill_dirs;
 	std::vector<std::wstring> disabled_skills;
+	bool Infinite = true;
+	std::function<void(nlohmann::json& j, std::string& resp, bool& free_form,long long cb)> user_ask_function;
+	long long ask_function_callback = 0;
 };
 */
-auto s1 = raw.CreateSession("gpt-4.1", nullptr); // use the default COPILOT_SESSION_PARAMETERS
+auto s1 = raw.CreateSession("gpt-4.1", nullptr); // use the default COPILOT_SESSION_PARAMETERS if nullptr is passed
 //  Ollama also supported
 //	auto s1 = raw.CreateSession("phi:latest");
 std::vector<std::wstring> files = { L"f:\\tp2imports\\365.jpg" };
@@ -59,6 +62,21 @@ raw.Wait(s1, m2, 60000);
 raw.Wait(s1, m1, 60000);
 raw.DestroySession(s1); // leaves files there so session can be resumed later
 raw.DeleteSession(s1); // deletes session
+```
+
+# User input
+You can pass a function callback to the COPILOT_SESSION_PARAMETERS and this is called whenever the model wants to ask you a question.
+
+```cpp
+COPILOT_SESSION_PARAMETERS spp;
+spp.user_ask_function = [&](nlohmann::json& j, std::string& resp, bool& free_form,long long cb) -> void {
+	// auto question = j["params"]["question"].get<std::string>();
+	// auto choices = j["params"]["choices"].get<std::vector<std::string>>(); // it may not exist
+	// auto free_form = j["params"]["free_form"].get<bool>();
+	resp = "My name is Michael";
+	};
+auto s1 = raw.CreateSession("gpt-4.1", &spp);
+auto r = raw.One(s1, "Ask the user his name", 60000);
 ```
 
 # Tools
@@ -110,7 +128,7 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 
 ```
 
-Other functions:
+# Other functions
 
 * `Compact()` to compact a session
 * `Status()` contains also the account's premium quota percentages and usage
