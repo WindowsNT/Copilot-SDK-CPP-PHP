@@ -122,6 +122,8 @@ struct PENDING_MESSAGE
 	std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr;
 	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
 	long long ptr = 0;
+	std::string completed_content;
+	std::string completed_reasoning;
 	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
 	std::vector<std::shared_ptr<COPILOT_MESSAGE>> reasoning_messages;
 	std::vector<std::shared_ptr<COPILOT_MESSAGE>> output_messages;
@@ -765,6 +767,11 @@ class COPILOT_RAW
 							}
 							if (evtype == "assistant.message" && data.contains("content") && data["content"].get<std::string>().length() > 0)
 							{
+								auto content = data["content"].get<std::string>();
+								if (content.empty())
+								{
+									__nop();
+								}
 								bool F = 0;
 								for (auto& s : all_sessions)
 								{
@@ -773,13 +780,19 @@ class COPILOT_RAW
 										if (s->pending_message)
 										{
 											ExecuteCallbacks(s,s->pending_message);
+											s->pending_message->completed_content += content;
+											if (data.contains("reasoningText"))
+												s->pending_message->completed_reasoning += data["reasoningText"].get<std::string>();
+
+/*											
 											if (!s->pending_message->completed_message)
 												s->pending_message->completed_message = std::make_shared<COMPLETED_MESSAGE>();
-											s->pending_message->completed_message->content = data["content"].get<std::string>();
+											s->pending_message->completed_message->content = content;
 											s->pending_message->completed_message->messageId = data["messageId"].get<std::string>();
 											if (data.contains("reasoningText"))
-												s->pending_message->completed_message->reasoningText = data["reasoningText"].get<std::string>();
+												s->pending_message->completed_message->reasoningText += data["reasoningText"].get<std::string>();
 											s->pending_message = 0;
+*/
 										}
 										F = 1;
 										break;
@@ -797,7 +810,13 @@ class COPILOT_RAW
 										// Send the next one
 										std::lock_guard<std::recursive_mutex> lock(response_mutex);
 										if (s->pending_message)
+										{
+											if (!s->pending_message->completed_message)
+												s->pending_message->completed_message = std::make_shared<COMPLETED_MESSAGE>();
+											s->pending_message->completed_message->content = s->pending_message->completed_content;
+											s->pending_message->completed_message->reasoningText = s->pending_message->completed_reasoning;
 											s->pending_message = nullptr;
+										}
 										if (s->pending_messages.size())
 										{
 											auto pm = s->pending_messages[0];
