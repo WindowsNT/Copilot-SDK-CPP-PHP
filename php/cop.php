@@ -135,7 +135,29 @@ class Copilot {
                                 }
                                 if (isset($response["method"]) && $response["method"] == "session.event" && isset($response["params"]["event"]["type"]) && $response["params"]["event"]["type"] == "permission.requested") 
                                 {
-                                    // find id
+                                    /*
+                                    								nlohmann::json j;
+								j["jsonrpc"] = "2.0";
+								j["method"] = "session.permissions.handlePendingPermissionRequest";
+								j["id"] = next();
+								j["params"]["requestId"] = data["requestId"].get<std::string>();
+								j["params"]["result"]["kind"] = "approved";
+								j["params"]["sessionId"] = sessionId;
+								ret(j, false);
+
+*/
+                                $j = array();
+                                $j["jsonrpc"] = "2.0";
+                                $j["method"] = "session.permissions.handlePendingPermissionRequest";
+                                $j["id"] = $this->next();
+                                $j["params"] = array();
+                                $j["params"]["requestId"] = $response["params"]["event"]["data"]["requestId"];
+                                $j["params"]["result"] = array();
+                                $j["params"]["result"]["kind"] = "approved";
+                                $j["params"]["sessionId"] = $response["params"]["sessionId"];
+                                $this->sendmessage($j,3);
+
+/*                                    // find id
                                     $id = isset($response["id"]) ? $response["id"] : 0;
                                     // Answer immediately 
                                     $j = array();
@@ -146,6 +168,9 @@ class Copilot {
                                     $j["result"]["result"] = array();
                                     $j["result"]["result"]["kind"] = "approved";
                                     $this->sendmessage($j,3);
+                                    */
+
+
                                     continue;
                                 }
 
