@@ -9,8 +9,7 @@ Raw.hpp also compiles in linux with g++.
 # Ollama 
 If you want to also use local models, download and run [Ollama](https://ollama.com/), specify to make it visible to the network. The models will be visible to your C++ code.
 
-
-# Example 
+# Initialize
 ```cpp
 #include "raw.hpp"
 
@@ -19,7 +18,16 @@ If you want to also use local models, download and run [Ollama](https://ollama.c
 
 // Or a new one with your github access token
 //	COPILOT_RAW raw(L"c:\\copilot\\copilot.exe", 3000, "your_token",1);
+```
 
+# Quick example
+```cpp
+auto s1 = raw.CreateSession("gpt-4.1");
+auto r = raw.One(s1, "Tell me a short joke", 60000); // wait for 1 minute
+```
+
+# Example 
+```cpp
 raw.Ping();
 std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 raw.Sessions(sessions);
