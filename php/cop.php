@@ -53,7 +53,7 @@ class Copilot {
         }
         return $responses;
     }
-    
+
     private function next()
     {
         return $this->next_id++;
@@ -146,16 +146,16 @@ class Copilot {
 								ret(j, false);
 
 */
-                                $j = array();
-                                $j["jsonrpc"] = "2.0";
-                                $j["method"] = "session.permissions.handlePendingPermissionRequest";
-                                $j["id"] = $this->next();
-                                $j["params"] = array();
-                                $j["params"]["requestId"] = $response["params"]["event"]["data"]["requestId"];
-                                $j["params"]["result"] = array();
-                                $j["params"]["result"]["kind"] = "approved";
-                                $j["params"]["sessionId"] = $response["params"]["sessionId"];
-                                $this->sendmessage($j,3);
+                                    $j = array();
+                                    $j["jsonrpc"] = "2.0";
+                                    $j["method"] = "session.permissions.handlePendingPermissionRequest";
+                                    $j["id"] = $this->next();
+                                    $j["params"] = array();
+                                    $j["params"]["requestId"] = $response["params"]["event"]["data"]["requestId"];
+                                    $j["params"]["result"] = array();
+                                    $j["params"]["result"]["kind"] = "approved";
+                                    $j["params"]["sessionId"] = $response["params"]["sessionId"];
+                                    $this->sendmessage($j,3);
 
 /*                                    // find id
                                     $id = isset($response["id"]) ? $response["id"] : 0;
@@ -181,15 +181,16 @@ class Copilot {
                                     {
                                         if ($waittype == 2)
                                             {
+                                                $what_ret = '';
                                                 foreach ($all_type_1 as $msg)
                                                     {
                                                         // if is session.event and params.event.type is session.partial_response, then print the content of params.event.partial_response.content
                                                         if (isset($msg["method"]) && $msg["method"] == "session.event" && isset($msg["params"]["event"]["type"]) && $msg["params"]["event"]["type"] == "assistant.message") 
                                                             {
-                                                                return $msg["params"]["event"]["data"]["content"];
+                                                                $what_ret .= $msg["params"]["event"]["data"]["content"];
                                                             }
                                                     }
-                                                return "";
+                                                return $what_ret;
                                             }
                                         return $all_type_1;
                                     }

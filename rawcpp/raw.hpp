@@ -770,7 +770,6 @@ class COPILOT_RAW
 								auto content = data["content"].get<std::string>();
 								if (content.empty())
 								{
-									__nop();
 								}
 								bool F = 0;
 								for (auto& s : all_sessions)

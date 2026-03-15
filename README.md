@@ -23,7 +23,7 @@ If you want to also use local models, download and run [Ollama](https://ollama.c
 # Quick example
 ```cpp
 auto s1 = raw.CreateSession("gpt-4.1");
-auto r = raw.One(s1, "Tell me a short joke", 60000); // wait for 1 minute
+auto r = raw.One(s1, "Tell me a short joke", 60000); // wait for maximum 1 minute
 ```
 
 # Example 
@@ -148,21 +148,20 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
-* -f <folder> : folder where copilot.exe is located. The default is `c:\ProgramData\933bd016-0397-42c9-b3e0-eaa7900ef53e`, 
+* -f <folder> : folder where copilot.exe is located. 
 * -m <model> : model name,  default is "gpt-5 mini"
-* --token <token> : A github token to use. 
-* --raw : Use the raw mode (mandatory. This CopilotChat version only runs in raw mode).
+* -t or --token <token> : A github token to use. 
 
 Once CopilotChat is running, you can use the commands:
 * /clipboard                : Pass the clipboard contents to the chat
-* /compact                  : [raw mode] Compact the session
+* /compact                  : Compact the session
 * /file <file>              : Add an attachment for next prompt
 * /models                   : Lists the available models
 * /model <model_name>       : Changes the model to use
 * /restart                  : Restart copilot
 * /skill <folder>           : Add a skills directory and restart Copilot
 * /disabledskill "skill"    : Add a disabled skill and restart Copilot
-* /quota                    : Show your account quota (raw mode only)
+* /quota                    : Show your account quota 
 * /save <N> <file>          : Save response N to file
 * /status                   : Show Copilot Status
 * /text <file>              : Pass text file contents as next prompt
