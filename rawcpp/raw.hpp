@@ -905,7 +905,7 @@ class COPILOT_RAW
 	std::function<void(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)> AskUser;
 	long long AskUserCallback = 0;
 
-	void DefaultAskUser(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)
+	void DefaultAskUser(nlohmann::json&,std::string& response,bool& FreeForm,long long)
 	{
 		response = "No response";
 		FreeForm = true;
@@ -1173,18 +1173,18 @@ nlohmann::json AuthStatus()
 	}
 
 
-	nlohmann::json SetMode(std::shared_ptr<COPILOT_SESSION> s,COPILOT_RAW_MODE m)
+	nlohmann::json SetMode(std::shared_ptr<COPILOT_SESSION> s,COPILOT_RAW_MODE m6)
 	{
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
 		j["method"] = "session.mode.set";
 		j["params"]["sessionId"] = s->sessionId;
-		if (m == COPILOT_RAW_MODE::INTERACTIVE)
+		if (m6 == COPILOT_RAW_MODE::INTERACTIVE)
 			j["params"]["mode"] = "interactive";
-		else if (m == COPILOT_RAW_MODE::PLAN)
+		else if (m6 == COPILOT_RAW_MODE::PLAN)
 			j["params"]["mode"] = "plan";
-		else if (m == COPILOT_RAW_MODE::AUTOPILOT)
+		else if (m6 == COPILOT_RAW_MODE::AUTOPILOT)
 			j["params"]["mode"] = "autopilot";	
 		auto r = ret(j,true);
 		return r;
@@ -1542,9 +1542,9 @@ nlohmann::json AuthStatus()
 			{
 				if (rm->Ack == 1)
 					continue;
-				std::string m = rm->content;
+				std::string m7 = rm->content;
 				rm->Ack = 1;
-				auto hr = s->messaging_callback(m, s->ptr);
+				auto hr = s->messaging_callback(m7, s->ptr);
 				if (FAILED(hr))
 					Abort(se);
 			}
@@ -1936,9 +1936,9 @@ nlohmann::json AuthStatus()
 			return nullptr;
 		auto ollama_models = ollama_list();
 		bool F = 0;
-		for (auto& m : ollama_models)
+		for (auto& m7 : ollama_models)
 		{
-			if (m.id == model_id)
+			if (m7.id == model_id)
 			{
 				F = 1;
 				break;

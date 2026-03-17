@@ -79,9 +79,10 @@ You can pass a function callback to the COPILOT_SESSION_PARAMETERS and this is c
 COPILOT_SESSION_PARAMETERS spp;
 spp.user_ask_function = [&](nlohmann::json& j, std::string& resp, bool& free_form,long long cb) -> void {
 	// auto question = j["params"]["question"].get<std::string>();
-	// auto choices = j["params"]["choices"].get<std::vector<std::string>>(); // it may not exist
-	// auto free_form = j["params"]["free_form"].get<bool>();
+	// auto is_question_free_form = j["params"]["free_form"].get<bool>();
+	// auto choices = j["params"]["choices"].get<std::vector<std::string>>(); // maybe not exists if is_question_free_form is true
 	resp = "My name is Michael";
+	free_form = true;
 	};
 auto s1 = raw.CreateSession("gpt-4.1", &spp);
 auto r = raw.One(s1, "Ask the user his name", 60000);
@@ -148,9 +149,9 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 # CopilotChat
 CopilotChat binary is a test command line app that you can use to test the SDK.
 Command line parameters:
-* -f <folder> : folder where copilot.exe is located. 
-* -m <model> : model name,  default is "gpt-5 mini"
-* -t or --token <token> : A github token to use. 
+* -f or --folder <folder> : folder where copilot.exe is located. 
+* -m or --model  <model>  : model name,  default is "gpt-5 mini"
+* -t or --token  <token>  : A github token to use. 
 
 Once CopilotChat is running, you can use the commands:
 * /clipboard                : Pass the clipboard contents to the chat
