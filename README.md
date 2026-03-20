@@ -29,6 +29,7 @@ auto r = raw.One(s1, "Tell me a short joke", 60000); // wait for maximum 1 minut
 # Example 
 ```cpp
 raw.Ping();
+auto models = raw.CopilotModels();
 std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
 raw.Sessions(sessions);
 	
