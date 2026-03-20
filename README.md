@@ -162,6 +162,7 @@ Once CopilotChat is running, you can use the commands:
 * /model <model_name>       : Changes the model to use
 * /restart                  : Restart copilot
 * /skill <folder>           : Add a skills directory and restart Copilot
+* /streaming                : Toggle streaming mode (default on)
 * /disabledskill "skill"    : Add a disabled skill and restart Copilot
 * /quota                    : Show your account quota 
 * /save <N> <file>          : Save response N to file
