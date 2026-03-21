@@ -2386,12 +2386,22 @@ nlohmann::json AuthStatus()
 		sa.sin_addr.s_addr = inet_addr(host.c_str());
 #pragma warning(default:4996)
 
-		int res = connect(x, (sockaddr*)&sa, sizeof(sa));
-		if (res == -1)
+		int tries = 3;
+		for (int itry = 0; itry < tries; itry++)
 		{
-			closesocket(x);
-			x = 0;
-			return;
+			int res = connect(x, (sockaddr*)&sa, sizeof(sa));
+			if (res == -1)
+			{
+				if (itry == tries - 1)
+				{
+					closesocket(x);
+					x = 0;
+					return;
+				}
+				Sleep(2000);
+			}
+			else
+				break;
 		}
 		wait_thread = std::make_shared<std::thread>(&COPILOT_RAW::WaitThread, this);
 
