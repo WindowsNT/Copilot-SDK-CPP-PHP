@@ -70,6 +70,20 @@ struct COPILOT_MESSAGE
 
 };
 
+struct COPILOT_AGENT
+{
+	std::string name;
+	std::string displayName;
+	std::string description;
+};
+
+struct COPILOT_SKILL
+{
+	std::string name, description, source;
+	bool enabled = false, userInvokable = false;
+};
+
+class COPILOT_RAW;
 
 struct COPILOT_RAW_SDK_MODEL
 {
@@ -180,6 +194,7 @@ struct COPILOT_SESSION
 	std::string model;
 	std::shared_ptr<PENDING_MESSAGE> pending_message;
 	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
+	bool Elicitation = false;
 
 	int nid = 1;
 	std::any user_data;
@@ -827,7 +842,7 @@ class COPILOT_RAW
 								}
 							}
 
-							if (evtype == "session.start")
+/*							if (evtype == "session.start")
 							{
 								auto data = r["params"]["event"]["data"];
 								std::string sessionId, cwd;
@@ -855,6 +870,7 @@ class COPILOT_RAW
 									all_sessions.push_back(s);
 								}
 							}
+							*/
 						}
 					}
 					catch (std::exception& e)
@@ -1575,6 +1591,152 @@ nlohmann::json AuthStatus()
 		}
 	}
 
+	COPILOT_AGENT GetCurrentAgent(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.agent.getCurrent";
+		j["params"]["sessionId"] = s->sessionId;
+		auto res = ret(j, true);
+		try
+		{
+			auto& agent = res["result"]["agent"];
+			COPILOT_AGENT a;
+			a.name = agent["name"].get<std::string>();
+			a.description = agent["description"].get<std::string>();
+			a.displayName = agent["displayName"].get<std::string>();
+			return a;
+		}
+		catch (...)
+		{
+			return {};
+		}
+	}
+
+	void EnableSkill(std::shared_ptr<COPILOT_SESSION> s, const char* name, bool enable)
+	{
+		if (!s)
+			return;
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.skills.enable";
+		if (!enable)
+			j["method"] = "session.skills.disable";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["name"] = name;
+		ret(j, false);
+	}
+
+	COPILOT_AGENT SetCurrentAgent(std::shared_ptr<COPILOT_SESSION> s,const char* name)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.agent.select";
+		if (!name)
+			j["method"] = "session.agent.deselect";
+		j["params"]["sessionId"] = s->sessionId;
+		if (name)
+			j["params"]["name"] = name;
+		auto res = ret(j, true);
+		try
+		{
+			auto& agent = res["result"]["agent"];
+			COPILOT_AGENT a;
+			a.name = agent["name"].get<std::string>();
+			a.description = agent["description"].get<std::string>();
+			a.displayName = agent["displayName"].get<std::string>();
+			return a;
+		}
+		catch (...)
+		{
+			return {};
+		}
+	}
+
+
+	std::vector<COPILOT_AGENT> ListAgents(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.agent.list";
+		j["params"]["sessionId"] = s->sessionId;
+		auto res = ret(j, true);
+		try
+		{
+			auto& agents = res["result"]["agents"];
+			std::vector<COPILOT_AGENT> ret;
+			for (auto& ag : agents)
+			{
+				COPILOT_AGENT a;
+				a.name = ag["name"].get<std::string>();
+				a.description = ag["description"].get<std::string>();
+				a.displayName = ag["displayName"].get<std::string>();
+				ret.push_back(a);
+			}
+			return ret;
+		}
+		catch(...)
+		{
+			return {};
+		}
+	}
+
+	std::vector<COPILOT_SKILL> ListSkills(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.skills.list";
+		j["params"]["sessionId"] = s->sessionId;
+		auto res = ret(j, true);
+		try
+		{
+			auto& agents = res["result"]["agents"];
+			std::vector<COPILOT_SKILL> ret;
+			for (auto& ag : agents)
+			{
+				COPILOT_SKILL a;
+				a.name = ag["name"].get<std::string>();
+				a.description = ag["description"].get<std::string>();
+				a.source = ag["source"].get<std::string>();
+				a.userInvokable = ag["userInvokable"].get<bool>();
+				a.enabled = ag["enabled"].get<bool>();
+				ret.push_back(a);
+			}
+			return ret;
+		}
+		catch (...)
+		{
+			return {};
+		}
+	}
+
+
+	std::shared_ptr<COMPLETED_MESSAGE> Fleet(std::shared_ptr<COPILOT_SESSION> s,int WaitMs = 0)
+	{
+		if (!s)
+			return nullptr;
+		auto pm = CreateMessage("");
+		nlohmann::json j;
+		Send(s, pm, true);
+		int r = Wait(s, pm, WaitMs);
+		if (r == 0)
+			return pm->completed_message;
+		return nullptr;
+	}
+
 	std::string One(std::shared_ptr<COPILOT_SESSION> s, const char* message, int WaitMs = 0)
 	{
 		auto pm = CreateMessage(message);
@@ -1615,7 +1777,7 @@ nlohmann::json AuthStatus()
 
 	}
 
-	void Send(std::shared_ptr<COPILOT_SESSION> s, std::shared_ptr<PENDING_MESSAGE> wh)
+	void Send(std::shared_ptr<COPILOT_SESSION> s, std::shared_ptr<PENDING_MESSAGE> wh,bool Fleet = false)
 	{
 		if (!s)
 			return;
@@ -1659,8 +1821,11 @@ nlohmann::json AuthStatus()
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
 		j["method"] = "session.send";
+		if (Fleet)
+			j["method"] = "session.fleet.start";
 		j["params"]["sessionId"] = s->sessionId;
-		j["params"]["prompt"] = pm->m;
+		if (!Fleet)
+			j["params"]["prompt"] = pm->m;
 
 
 
@@ -2066,17 +2231,30 @@ nlohmann::json AuthStatus()
 
 
 		auto old_num_sessions = all_sessions.size();
-		ret(j,false);
-		for (int tries = 0 ; tries < 100 ; tries++)
+		auto u = ret(j,true);
+		try
 		{
-			Sleep(100);
-			std::lock_guard<std::recursive_mutex> lock(response_mutex);
-			if (old_num_sessions < all_sessions.size())
+			auto s = std::make_shared<COPILOT_SESSION>();
+			auto res = u["result"];
+			s->sessionId = res["sessionId"].get<std::string>();
+			s->model = model_id;
+			s->cwd = res["workspacePath"].get<std::string>();
+			if (res.contains("capabilities"))
 			{
-				auto se = all_sessions.back();
-				se->model = model_id;
-				return se;
+				auto capabilities = res["capabilities"];
+				if (capabilities.contains("ui"))
+				{
+					auto ui = capabilities["ui"];
+					if (ui.contains("elicitation"))
+						s->Elicitation = ui["elicitation"].get<bool>();
+				}
 			}
+			all_sessions.push_back(s);
+			return s;
+		}
+		catch (...)
+		{
+
 		}
 		return nullptr;
 	}

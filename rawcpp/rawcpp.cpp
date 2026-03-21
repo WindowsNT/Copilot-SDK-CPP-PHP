@@ -123,7 +123,7 @@ int wmain()
 	}
 
 	// User input test
-	if (1)
+	if (0)
 	{
 		COPILOT_SESSION_PARAMETERS spp;
 		spp.user_ask_function = [&](nlohmann::json& j, std::string& resp, bool& free_form,long long cb) -> void {
@@ -135,6 +135,24 @@ int wmain()
 		auto s1 = raw.CreateSession("gpt-4.1", &spp);
 		auto r = raw.One(s1, "Ask the user his name", 60000);
 		MessageBoxA(0, r.c_str(), "Information", 0);
+	}
+
+	//  Agents and Fleet Test
+	if (0)
+	{
+		auto s1 = raw.CreateSession("gpt-5-mini");
+		auto la = raw.ListAgents(s1);
+		auto ca = raw.GetCurrentAgent(s1);
+		if (la.size() > 0)
+		{
+			auto ca2 = raw.SetCurrentAgent(s1, la[0].name.c_str());
+			ca = raw.GetCurrentAgent(s1);
+			raw.SetCurrentAgent(s1, nullptr);
+		}
+		auto r = raw.One(s1, "Tell me a short story about WW2", 60000);
+		MessageBoxA(0, r.c_str(), "Information", 0);
+		auto flt = raw.Fleet(s1);
+		__noop();
 	}
 
 	// Tool test
