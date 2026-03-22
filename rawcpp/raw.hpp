@@ -184,10 +184,6 @@ struct COPILOT_SESSION_PARAMETERS
 
 struct COPILOT_SESSION
 {
-	SOCKET ollama = 0;
-	bool OllamaStreaming = false;
-	std::string ollama_context;
-	std::shared_ptr<std::thread> OllamaThread;
 	std::string sessionId;
 	std::string cwd;
 	std::string title;
@@ -195,7 +191,10 @@ struct COPILOT_SESSION
 	std::shared_ptr<PENDING_MESSAGE> pending_message;
 	std::vector<std::shared_ptr<PENDING_MESSAGE>> pending_messages;
 	bool Elicitation = false;
-
+	SOCKET ollama = 0;
+	bool OllamaStreaming = false;
+	std::string ollama_context;
+	std::shared_ptr<std::thread> OllamaThread;
 	int nid = 1;
 	std::any user_data;
 
@@ -1827,7 +1826,26 @@ nlohmann::json AuthStatus()
 		if (!Fleet)
 			j["params"]["prompt"] = pm->m;
 
-
+		// Test 
+		/*
+		if (1)
+		{
+			j["params"]["response_format"] = nlohmann::json::object();
+			j["params"]["response_format"]["type"] = "json_schema";
+			const char* sc = R"({
+      "name": "Command",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "command": { "type": "string" },
+          "arguments": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["command", "arguments"]
+      }})";
+			j["params"]["response_format"]["json_schema"] = nlohmann::json::parse(sc);
+		}
+		*/
 
 		if (pm->attachments.size())
 		{

@@ -68,8 +68,10 @@ int wmain()
 #endif
 	COPILOT_RAW raw("127.0.0.1", 3000);
 //	COPILOT_RAW raw(L"f:\\copilot2\\copilot.exe", 3000, "your_token",1);
-	std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
-	raw.Sessions(sessions);
+	
+	
+	// std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
+	// raw.Sessions(sessions);
 
 
 	int iVersion = 0;
@@ -77,6 +79,13 @@ int wmain()
 	auto st = raw.Status();
 
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
+	if (1)
+	{
+		// Simple
+		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+		auto m1 = raw.One(s1, "Hello there", 60000);
+
+	}
 
 	// Test file input and session compact
 	if (0)
@@ -133,6 +142,17 @@ int wmain()
 			resp = "My name is Michael";
 			};
 		auto s1 = raw.CreateSession("gpt-4.1", &spp);
+		auto r = raw.One(s1, "Ask the user his name", 60000);
+		MessageBoxA(0, r.c_str(), "Information", 0);
+	}
+
+	// Skills test
+	if (0)
+	{
+		COPILOT_SESSION_PARAMETERS spp;
+		spp.skill_dirs.push_back(L"r:\\skills");
+		auto s1 = raw.CreateSession("gpt-5-mini", &spp);
+		auto sl = raw.ListSkills(s1);
 		auto r = raw.One(s1, "Ask the user his name", 60000);
 		MessageBoxA(0, r.c_str(), "Information", 0);
 	}
