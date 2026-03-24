@@ -196,6 +196,7 @@ struct COPILOT_SESSION
 	std::string ollama_context;
 	std::shared_ptr<std::thread> OllamaThread;
 	int nid = 1;
+	std::string summary;
 	std::any user_data;
 
 
@@ -568,7 +569,7 @@ class COPILOT_RAW
 		return rs;
 	}
 
-	void Log(const char* s)
+	void Log(const char* s,int mode)
 	{
 #ifdef _DEBUG
 		OutputDebugStringA(s);
@@ -576,7 +577,7 @@ class COPILOT_RAW
 #endif
 		auto lf = LogF;
 		if (lf)
-			lf(s);
+			lf(s,mode);
 	}
 
 
@@ -597,7 +598,7 @@ class COPILOT_RAW
 			for (auto response : responses2)
 			{
 				std::lock_guard<std::recursive_mutex> lock(response_mutex);
-				Log(response.c_str());
+				Log(response.c_str(),1);
 
 				// Parse response for "method" session.event
 				if (1)
@@ -916,7 +917,7 @@ class COPILOT_RAW
 
 	}
 
-	std::function<void(const char*)> LogF;
+	std::function<void(const char*,int )> LogF;
 	std::function<void(nlohmann::json& request,std::string& response,bool& FreeForm,long long cb)> AskUser;
 	long long AskUserCallback = 0;
 
@@ -930,7 +931,7 @@ public:
 
 
 
-	void SetLogFunction(std::function<void(const char*)> f)
+	void SetLogFunction(std::function<void(const char*,int)> f)
 	{
 		LogF = f;
 	}
@@ -948,7 +949,7 @@ public:
 	nlohmann::json ret(nlohmann::json& j,bool w)
 	{
 		auto send = j.dump();
-		Log(send.c_str());
+		Log(send.c_str(),0);
 
 		if (1)
 		{
@@ -1885,6 +1886,8 @@ nlohmann::json AuthStatus()
 				se.cwd = s["cwd"].get<std::string>();
 			if (s.contains("title"))
 				se.title = s["title"].get<std::string>();
+			if (s.contains("summary"))
+				se.summary = s["summary"].get<std::string>();
 			auto se2 = std::make_shared<COPILOT_SESSION>(se);
 			sessions.push_back(se2);
 		}
@@ -2248,7 +2251,7 @@ nlohmann::json AuthStatus()
 		}
 
 
-		auto old_num_sessions = all_sessions.size();
+		//auto old_num_sessions = all_sessions.size();
 		auto u = ret(j,true);
 		try
 		{
@@ -2351,6 +2354,20 @@ nlohmann::json AuthStatus()
 			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --acp --port %d --log-level all --headless", path_to_cli, toks.data(), port);
 		if (debug == 100)
 			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --auth-token-env %s --log-level all", path_to_cli, toks.data());
+
+		bool NoToken = 0;
+		if (auth_token == 0 || strlen(auth_token) == 0)
+			NoToken = 1;
+
+		if (NoToken)
+		{
+			swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --acp --port %d --log-level info --headless", path_to_cli, port);
+			if (debug == 2)
+				swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --acp --port %d --log-level all --headless", path_to_cli,  port);
+			if (debug == 100)
+				swprintf_s(cmd.data(), 1000, L"\"%s\" --no-auto-update --log-level all", path_to_cli);
+		}
+		
 		PROCESS_INFORMATION pi = {};
 		STARTUPINFO si = {};
 		si.cb = sizeof(STARTUPINFO);
@@ -2367,12 +2384,14 @@ nlohmann::json AuthStatus()
 		}
 		FreeEnvironmentStringsW((LPWCH)base);
 
-		envBlock += toks.data();
-		envBlock += L"=";
-		envBlock += tou(auth_token);
-		envBlock.push_back('\0');
-
-		envBlock.push_back('\0');
+		if (NoToken == 0)
+		{
+			envBlock += toks.data();
+			envBlock += L"=";
+			envBlock += tou(auth_token);
+			envBlock.push_back('\0');
+			envBlock.push_back('\0');
+		}
 
 		DWORD flg = CREATE_UNICODE_ENVIRONMENT;
 		if (debug == 0)
