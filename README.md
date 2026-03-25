@@ -172,6 +172,10 @@ Once CopilotChat is running, you can use the commands:
 * /quit or /exit            : Exits the application
  
 
+ # CopilotChatW
+CopilotChatW is a simple WinUI3 GUI demonstrating some Copilot features with the ability to login with multiple accounts.
+
+
 # PHP
 Just require "cop.php" in your PHP code. You do not need python.
 
