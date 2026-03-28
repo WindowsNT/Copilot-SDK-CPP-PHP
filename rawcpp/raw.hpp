@@ -47,6 +47,7 @@ inline static HRESULT OllamaRunning2;
 
 struct COMPLETED_MESSAGE
 {
+	std::string error;
 	std::string content;
 	std::string messageId;
 	std::string reasoningText;
@@ -136,6 +137,7 @@ struct PENDING_MESSAGE
 	std::function<HRESULT(std::string& reasoning, long long ptr)> reasoning_callback = nullptr;
 	std::function<HRESULT(std::string& msg, long long ptr)> messaging_callback = nullptr;
 	long long ptr = 0;
+	std::string error;
 	std::string completed_content;
 	std::string completed_reasoning;
 	std::shared_ptr<COMPLETED_MESSAGE> completed_message;
@@ -815,6 +817,22 @@ class COPILOT_RAW
 								if (F)
 									continue;
 							}
+							if (evtype == "session.error")
+							{
+								bool F = 0;
+								for (auto& s : all_sessions)
+								{
+									if (s->sessionId == sessionId)
+									{
+										std::lock_guard<std::recursive_mutex> lock(response_mutex);
+										if (s->pending_message)
+											s->pending_message->error = response;
+										F = 1;
+									}
+								}
+								if (F)
+									continue;
+							}
 							if (evtype == "session.idle")
 							{
 								for (auto& s : all_sessions)
@@ -829,6 +847,7 @@ class COPILOT_RAW
 												s->pending_message->completed_message = std::make_shared<COMPLETED_MESSAGE>();
 											s->pending_message->completed_message->content = s->pending_message->completed_content;
 											s->pending_message->completed_message->reasoningText = s->pending_message->completed_reasoning;
+											s->pending_message->completed_message->error = s->pending_message->error;
 											s->pending_message = nullptr;
 										}
 										if (s->pending_messages.size())
