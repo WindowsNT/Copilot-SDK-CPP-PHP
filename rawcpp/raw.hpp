@@ -2506,4 +2506,5 @@ nlohmann::json AuthStatus()
 		}
 #endif
 	}
-};
+}; 
+      
