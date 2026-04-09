@@ -87,6 +87,15 @@ int wmain()
 
 	}
 
+	if (0)
+	{
+		// Ollama image gen using x/flux2-klein, doesn't work yet
+		auto s1 = raw.CreateSession("x/flux2-klein:latest", nullptr);
+		auto m1 = raw.CreateMessage("Generate an image of a cat");
+		raw.Send(s1, m1);
+		MessageBox(0, 0, 0, 0);
+	}
+
 	// Test file input and session compact
 	if (0)
 	{
@@ -99,7 +108,7 @@ int wmain()
 			nlohmann::json j;
 			j["jsonrpc"] = "2.0";
 			j["id"] = raw.next();
-			j["method"] = "session.agent.list";
+			j["method"] = "mcp.config.list";
 			j["params"]["sessionId"] = s1->sessionId;
 			auto r = raw.ret(j, true);
 		}

@@ -91,6 +91,7 @@ struct COPILOT_RAW_SDK_MODEL
 	std::string id;
 	std::string fullname;
 	bool SupportsVision = false;
+	bool SupportsImageGeneration = false;
 	std::vector<std::string> supportedvisionmediatypes;
 	std::vector<std::string> supportedreasoningefforts;
 	int MaxPromptTokens = 0;
@@ -2072,6 +2073,47 @@ nlohmann::json AuthStatus()
 			m.fullname = name;
 			m.rate = 0.0f;
 			m.Ollama = 1;
+
+			// use /api/show /{model} to get capabilities
+			wchar_t path[256] = {};
+			char dat[256] = {};
+			swprintf_s(path, L"/api/show");
+			sprintf_s(dat, 256,R"({"model":"%s"})", name.c_str());
+			std::initializer_list<std::wstring> hdrs = { L"Content-Type: application/json" };
+			auto ji = r.RequestWithBuffer(path, L"POST", hdrs, dat, strlen(dat));
+			std::vector<char> dd;
+			r.ReadToMemory(ji, dd);
+			dd.resize(dd.size() + 1);
+
+			try
+			{
+				nlohmann::json model_details = nlohmann::json::parse(std::string(dd.data(), dd.size()));
+				// capabilities key
+				if (model_details.contains("capabilities"))
+				{
+					auto& capabilities = model_details["capabilities"];
+					// this is an array, check if contains key "vision"
+					for (auto& cap : capabilities)
+					{
+						if (cap == "vision")
+						{
+							m.SupportsVision = true;
+						}
+						if (cap == "completion")
+						{
+						}
+						if (cap == "image")
+						{
+							m.SupportsImageGeneration = true;
+						}
+					}
+				}
+
+			}
+			catch (...)
+			{
+
+			}
 			models.push_back(m);
 		}
 		return models;
