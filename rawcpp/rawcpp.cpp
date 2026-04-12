@@ -84,7 +84,7 @@ int wmain()
 		// Simple
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
 		auto m1 = raw.One(s1, "Hello there", 60000);
-
+//		raw.Metrics(s1);
 	}
 
 	if (0)

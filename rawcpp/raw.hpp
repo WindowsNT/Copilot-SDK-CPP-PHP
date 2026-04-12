@@ -1076,7 +1076,7 @@ public:
 						s += L"\r\n\r\nAccount Quota\r\n----------------------------------------------------\r\n";
 						auto& q = st.quota["premium_interactions"];
 						wchar_t buf[200] = {};
-						swprintf_s(buf, 100, L"%6.2f%% - Premium Percentage Usaged (%d/%d)\r\n", 100.0f - q.remainingPercentage,q.usedRequests,q.entitlementRequests);
+						swprintf_s(buf, 100, L"%6.2f%% - Premium Percentage Usage (%d/%d)\r\n", 100.0f - q.remainingPercentage,q.usedRequests,q.entitlementRequests);
 						s += buf;
 					}
 
@@ -1203,9 +1203,35 @@ nlohmann::json AuthStatus()
 		nlohmann::json j;
 		j["jsonrpc"] = "2.0";
 		j["id"] = next();
-		j["method"] = "session.compaction.compact";
+		j["method"] = "session.history.compact";
 		j["params"]["sessionId"] = s->sessionId;
 		return ret(j,true);
+	}
+
+	nlohmann::json Metrics(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.usage.getMetrics";
+		j["params"]["sessionId"] = s->sessionId;
+		return ret(j, true);
+	}
+
+
+	nlohmann::json Truncate(std::shared_ptr<COPILOT_SESSION> s,std::string evid)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.history.truncate";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["eventId"] = evid;
+		return ret(j, true);
 	}
 
 
