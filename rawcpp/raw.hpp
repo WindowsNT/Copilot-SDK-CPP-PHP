@@ -1297,6 +1297,55 @@ nlohmann::json AuthStatus()
 		return r;
 	}
 
+	nlohmann::json Fork(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "sessions.fork";
+		j["params"]["sessionId"] = s->sessionId;
+		auto r = ret(j, true);
+		return r;
+	}
+
+	nlohmann::json SetName(std::shared_ptr<COPILOT_SESSION> s,const char* nn)
+	{
+		if (!s || !nn)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.name.set";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["name"] = nn;
+		auto r = ret(j, true);
+		return r;
+	}
+
+
+
+	nlohmann::json GetName(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.name.get";
+		j["params"]["sessionId"] = s->sessionId;
+		auto r = ret(j, true);
+		return r;
+	}
+
+
 	nlohmann::json SwitchModel(std::shared_ptr<COPILOT_SESSION> s, const char* modelId)
 	{
 		if (!s)
