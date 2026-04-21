@@ -147,33 +147,10 @@ auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string t
 * `ResumeSession` to resume an existing session (get all resumable sessions with `Sessions()`).
 * `SwitchModel` to switch model in an existing session.
 
-# CopilotChat
-CopilotChat binary is a test command line app that you can use to test the SDK.
-Command line parameters:
-* -f or --folder <folder> : folder where copilot.exe is located. 
-* -m or --model  <model>  : model name,  default is "gpt-5 mini"
-* -t or --token  <token>  : A github token to use. 
+# AICmd
 
-Once CopilotChat is running, you can use the commands:
-* /clipboard                : Pass the clipboard contents to the chat
-* /compact                  : Compact the session
-* /file <file>              : Add an attachment for next prompt
-* /models                   : Lists the available models
-* /model <model_name>       : Changes the model to use
-* /restart                  : Restart copilot
-* /skill <folder>           : Add a skills directory and restart Copilot
-* /streaming                : Toggle streaming mode (default on)
-* /disabledskill "skill"    : Add a disabled skill and restart Copilot
-* /quota                    : Show your account quota 
-* /save <N> <file>          : Save response N to file
-* /status                   : Show Copilot Status
-* /text <file>              : Pass text file contents as next prompt
-* /thinking                 : Turns thinking mode on/off for models that support thinking tokens.
-* /quit or /exit            : Exits the application
- 
-
- # CopilotChatW
-CopilotChatW is a simple WinUI3 GUI demonstrating some Copilot features with the ability to login with multiple accounts.
+[AICmd](https://www.turbo-play.com/update4/F1CF486F-6DB7-4366-B257-C0EED848B85D/aicmd.exe) is a tool build with this SDK.
+Load it, then /help for commands.
 
 
 # PHP
