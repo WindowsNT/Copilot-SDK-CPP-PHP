@@ -709,38 +709,45 @@ class COPILOT_RAW
 								j["jsonrpc"] = "2.0";
 								j["method"] = "session.permissions.handlePendingPermissionRequest";
 								j["id"] = next();
-								j["params"]["requestId"] = data["requestId"].get<std::string>();
-								j["params"]["result"]["kind"] = "approved";
+
 								j["params"]["sessionId"] = sessionId;
+								j["params"]["requestId"] = data["requestId"].get<std::string>();
+
+								// fallback: πάντα safe
+								j["params"]["result"]["kind"] = "approve-once";
+
+								auto& pr = data["promptRequest"];
+								std::string kind = pr["kind"].get<std::string>();
+
+								if (kind == "commands")
+								{
+									j["params"]["result"]["approval"]["kind"] = "commands";
+									j["params"]["result"]["approval"]["commandIdentifiers"] = pr["commandIdentifiers"];
+								}
+								else if (kind == "read")
+								{
+									j["params"]["result"]["approval"]["kind"] = "read";
+									j["params"]["result"]["approval"]["paths"] = data["permissionRequest"]["possiblePaths"];
+								}
+								else if (kind == "write")
+								{
+									j["params"]["result"]["approval"]["kind"] = "write";
+									j["params"]["result"]["approval"]["paths"] = data["permissionRequest"]["possiblePaths"];
+								}
+								else if (kind == "http")
+								{
+									j["params"]["result"]["approval"]["kind"] = "http";
+									j["params"]["result"]["approval"]["urls"] = data["permissionRequest"]["possibleUrls"];
+								}
+								else
+								{
+									// ultimate fallback 
+									j["params"]["result"]["approval"]["kind"] = kind;
+								}
+
 								ret(j, false);
-
-
-/*								nlohmann::json j;
-								j["jsonrpc"] = "2.0";
-								if (r.contains("id"))
-								{
-									j["id"] = r["id"];
-									j["result"]["result"]["kind"] = "approved";
-									ret(j, false);
-								}
-								else
-								if (data.contains("requestId"))
-								{
-									j["id"] = data["requestId"].get<std::string>();
-									j["result"]["result"]["kind"] = "approved";
-									ret(j, false);
-								}
-								else
-								if (event.contains("id"))
-								{
-									j["id"] = event["id"].get<std::string>();
-									j["result"]["result"]["kind"] = "approved";
-									ret(j, false);
-								}
-*/
 								continue;
 							}
-
 						
 
 							if (evtype == "assistant.reasoning_delta")
@@ -1296,55 +1303,6 @@ nlohmann::json AuthStatus()
 		auto r = ret(j, true);
 		return r;
 	}
-
-	nlohmann::json Fork(std::shared_ptr<COPILOT_SESSION> s)
-	{
-		if (!s)
-			return {};
-		if (s->ollama)
-			return {};
-		nlohmann::json j;
-		j["jsonrpc"] = "2.0";
-		j["id"] = next();
-		j["method"] = "sessions.fork";
-		j["params"]["sessionId"] = s->sessionId;
-		auto r = ret(j, true);
-		return r;
-	}
-
-	nlohmann::json SetName(std::shared_ptr<COPILOT_SESSION> s,const char* nn)
-	{
-		if (!s || !nn)
-			return {};
-		if (s->ollama)
-			return {};
-		nlohmann::json j;
-		j["jsonrpc"] = "2.0";
-		j["id"] = next();
-		j["method"] = "session.name.set";
-		j["params"]["sessionId"] = s->sessionId;
-		j["params"]["name"] = nn;
-		auto r = ret(j, true);
-		return r;
-	}
-
-
-
-	nlohmann::json GetName(std::shared_ptr<COPILOT_SESSION> s)
-	{
-		if (!s)
-			return {};
-		if (s->ollama)
-			return {};
-		nlohmann::json j;
-		j["jsonrpc"] = "2.0";
-		j["id"] = next();
-		j["method"] = "session.name.get";
-		j["params"]["sessionId"] = s->sessionId;
-		auto r = ret(j, true);
-		return r;
-	}
-
 
 	nlohmann::json SwitchModel(std::shared_ptr<COPILOT_SESSION> s, const char* modelId)
 	{
@@ -2453,12 +2411,16 @@ nlohmann::json AuthStatus()
 #ifdef _WIN32
 	static std::wstring tou(const char* s)
 	{
+		if (!s)
+			return L"";
 		std::vector<wchar_t> buf(strlen(s) + 1);
 		MultiByteToWideChar(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size());
 		return std::wstring(buf.data());
 	}
 	static std::string toc(const wchar_t* s)
 	{
+		if (!s)
+			return "";
 		std::vector<char> buf(wcslen(s) * 4 + 1);
 		WideCharToMultiByte(CP_UTF8, 0, s, -1, buf.data(), (int)buf.size(), 0, 0);
 		return std::string(buf.data());

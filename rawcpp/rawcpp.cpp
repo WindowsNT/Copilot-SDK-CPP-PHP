@@ -79,7 +79,7 @@ int wmain()
 	auto st = raw.Status();
 
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
-	if (1)
+	if (0)
 	{
 		// Simple
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
