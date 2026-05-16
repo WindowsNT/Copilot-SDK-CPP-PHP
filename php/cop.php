@@ -118,21 +118,53 @@ class Copilot {
                         foreach ($responses as $response)
                             {
                                 // See if there is anything to request permission
-                                if (isset($response["method"]) && $response["method"] == "permission.request")
-                                {
-                                    // find id
-                                    $id = isset($response["id"]) ? $response["id"] : 0;
-                                    // Answer immediately 
-                                    $j = array();
-                                    $j["jsonrpc"] = "2.0";
-                                    if ($id)
-                                        $j["id"] = $id;
-                                    $j["result"] = array();
-                                    $j["result"]["result"] = array();
-                                    $j["result"]["result"]["kind"] = "approved";
-                                    $this->sendmessage($j,3);
-                                    continue;
-                                }
+                                if (
+    isset($response["method"]) &&
+    $response["method"] == "session.event" &&
+    isset($response["params"]["event"]["type"]) &&
+    $response["params"]["event"]["type"] == "permission.requested"
+) {
+    $data = $response["params"]["event"]["data"];
+    $requestId = $data["requestId"];
+    $sessionId = $response["params"]["sessionId"];
+
+    $j = array();
+    $j["jsonrpc"] = "2.0";
+    $j["method"] = "session.permissions.handlePendingPermissionRequest";
+    $j["id"] = rand(1, 999999);
+
+    $j["params"] = array();
+    $j["params"]["sessionId"] = $sessionId;
+    $j["params"]["requestId"] = $requestId;
+
+    // always approve once
+    $j["params"]["result"]["kind"] = "approve-once";
+
+    $prompt = $data["promptRequest"];
+    $kind = $prompt["kind"];
+
+    if ($kind == "commands") {
+        $j["params"]["result"]["approval"]["kind"] = "commands";
+        $j["params"]["result"]["approval"]["commandIdentifiers"] = $prompt["commandIdentifiers"];
+    } elseif ($kind == "read") {
+        $j["params"]["result"]["approval"]["kind"] = "read";
+        $j["params"]["result"]["approval"]["paths"] = $data["permissionRequest"]["possiblePaths"];
+    } elseif ($kind == "write") {
+        $j["params"]["result"]["approval"]["kind"] = "write";
+        $j["params"]["result"]["approval"]["paths"] = $data["permissionRequest"]["possiblePaths"];
+    } elseif ($kind == "http") {
+        $j["params"]["result"]["approval"]["kind"] = "http";
+        $j["params"]["result"]["approval"]["urls"] = $data["permissionRequest"]["possibleUrls"];
+    } else {
+        // fallback
+        $j["params"]["result"]["approval"]["kind"] = $kind;
+    }
+
+    $this->sendmessage($j, 3);
+    continue;
+}
+                              
+                                
                                 if (isset($response["method"]) && $response["method"] == "session.event" && isset($response["params"]["event"]["type"]) && $response["params"]["event"]["type"] == "permission.requested") 
                                 {
                                     /*

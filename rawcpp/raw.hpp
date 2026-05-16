@@ -1289,6 +1289,23 @@ nlohmann::json AuthStatus()
 	}
 
 
+	nlohmann::json  SetApproveAllPermissions(std::shared_ptr<COPILOT_SESSION> s,bool V)
+	{
+		if (!s)
+			return {};
+		if (s->ollama)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.permissions.setApproveAll";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["enabled"] = V;
+		auto r = ret(j, true);
+		return r;
+
+	}
+
 	nlohmann::json CurrentModel(std::shared_ptr<COPILOT_SESSION> s)
 	{
 		if (!s)
@@ -2266,6 +2283,56 @@ nlohmann::json AuthStatus()
 		return se;
 	}
 #endif
+
+	nlohmann::json SetName(std::shared_ptr<COPILOT_SESSION> s, const char* name)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.name.set";
+		j["params"]["sessionId"] = s->sessionId;
+		j["params"]["name"] = name;
+		auto j1 = ret(j, false);
+		s->title = name;
+		return j1;
+	}
+
+	nlohmann::json Suspend(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return {};
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.suspend";
+		j["params"]["sessionId"] = s->sessionId;
+		auto j1 = ret(j, false);
+		return j1;
+	}
+
+	std::string GetName(std::shared_ptr<COPILOT_SESSION> s)
+	{
+		if (!s)
+			return "";
+		nlohmann::json j;
+		j["jsonrpc"] = "2.0";
+		j["id"] = next();
+		j["method"] = "session.name.get";
+		j["params"]["sessionId"] = s->sessionId;
+		auto res = ret(j, true);
+		try
+		{
+			auto name = res["result"]["name"].get<std::string>();
+			s->title = name;
+			return name;
+		}
+		catch (...)
+		{
+			return "";
+		}
+	}
 
 	std::shared_ptr<COPILOT_SESSION> CreateSession(const char* model_id, COPILOT_SESSION_PARAMETERS* sp = 0)
 	{

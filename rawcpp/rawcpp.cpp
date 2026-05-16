@@ -78,13 +78,14 @@ int wmain()
 	raw.Ping(&iVersion);
 	auto st = raw.Status();
 
+
+
 	//	raw.SetMode(s1, COPILOT_RAW_MODE::INTERACTIVE);
 	if (0)
 	{
 		// Simple
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
-		auto n1 = raw.SetName(s1,"A name");
-		auto n2 = raw.GetName(s1);
+		raw.SetApproveAllPermissions(s1,true);
 		auto m1 = raw.One(s1, "Hello there", 60000);
 		raw.Metrics(s1);
 	}
@@ -102,6 +103,8 @@ int wmain()
 	if (0)
 	{
 		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+		auto n1 = raw.SetName(s1, "A name");
+		auto n2 = raw.GetName(s1);
 
 		// Test raw API
 		if (0)
