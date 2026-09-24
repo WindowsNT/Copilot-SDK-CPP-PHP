@@ -76,7 +76,8 @@ int wmain()
 	raw.Ping(&iVersion);
 	auto st = raw.Status();
 
-
+	// Create a hidden window
+	raw.TrayIcon(LoadIcon(0, IDI_APPLICATION));
 	if (0)
 	{
 		std::vector<std::shared_ptr<COPILOT_SESSION>> sessions;
@@ -89,7 +90,7 @@ int wmain()
 	if (0)
 	{
 		// Simple
-		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+		auto s1 = raw.CreateSession("gpt-6-luna", nullptr);
 		auto models_for_this = raw.ModelList(s1);
 		raw.SetApproveAllPermissions(s1,true);
 		auto m1 = raw.One(s1, "Hello there", 60000);
@@ -108,7 +109,7 @@ int wmain()
 	// Test file input and session compact
 	if (0)
 	{
-		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+		auto s1 = raw.CreateSession("gpt-6-luna", nullptr);
 		raw.SetAllowAllPermissions(s1, true);
 		raw.SetApproveAllPermissions(s1, true);
 		auto n1 = raw.SetName(s1, "A name");
@@ -148,7 +149,7 @@ int wmain()
 			raw.Compact(s1);
 			if (m1->completed_message && m2->completed_message)
 				MessageBoxA(0, m1->completed_message->content.c_str(), m2->completed_message->content.c_str(), 0);
-			raw.SwitchModel(s1, "gpt-5-mini");
+			raw.SwitchModel(s1, "gpt-6-luna");
 			auto single = raw.One(s1, "Another one", 60000);
 			MessageBoxA(0, single.c_str(), "Single", 0);
 	}
@@ -163,7 +164,7 @@ int wmain()
 			// auto free_form = j["params"]["free_form"].get<bool>();
 			resp = "My name is Michael";
 			};
-		auto s1 = raw.CreateSession("gpt-4.1", &spp);
+		auto s1 = raw.CreateSession("gpt-6-luna", &spp);
 		auto r = raw.One(s1, "Ask the user his name", 60000);
 		MessageBoxA(0, r.c_str(), "Information", 0);
 	}
@@ -222,7 +223,7 @@ int wmain()
 				// Or you can return a direct string, say "It is sunny".
 				return j.dump();
 			});
-		auto s1 = raw.CreateSession("gpt-4.1", nullptr);
+		auto s1 = raw.CreateSession("gpt-6-luna", nullptr);
 		auto m2 = raw.CreateMessage("What is the weather in Seattle?", [&](std::string tok, long long ptr) -> HRESULT {
 			std::cout << tok;
 			if (brk)
@@ -242,6 +243,9 @@ int wmain()
 			str += m2->completed_message->content.c_str();
 			MessageBoxA(0, str.c_str(), "Information", 0);
 	}
+
+	MessageBox(0, L"Press OK to terminate", L"Information", MB_OK);
+	raw.TrayIcon(0);
 	__nop();
 }
 

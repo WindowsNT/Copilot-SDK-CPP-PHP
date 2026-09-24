@@ -3,6 +3,10 @@
 typedef int SOCKET;
 #endif
 
+
+// https://unpkg.com/@github/copilot-linux-x64@1.0.84/schemas/api.schema.json  API SCHEMA
+
+
 #include <sstream>
 #include <any>
 #include <memory>
@@ -14,6 +18,7 @@ typedef int SOCKET;
 #include <functional>
 #ifdef _WIN32
 #include <wininet.h>
+#include <shellapi.h>
 #include <wincred.h>
 #include "rest.h"
 #else
@@ -1057,6 +1062,75 @@ public:
 		tools.push_back(t);
 	}
 
+
+#ifdef _WIN32
+	HANDLE hEventTray = 0;
+	NOTIFYICONDATA nda = {};
+	void TrayIcon(HICON h)
+	{
+		if (!h)
+		{
+			// End
+			if (nda.hWnd)
+				DestroyWindow(nda.hWnd);
+			nda.hWnd = 0;
+			Shell_NotifyIcon(NIM_DELETE, &nda);
+			if (hEventTray)
+				CloseHandle(hEventTray);
+			hEventTray = 0;
+			return;
+		}
+		hEventTray = CreateEvent(0, 0, 0, 0);
+
+	
+		auto thr = [&]()
+			{
+				// Create a tray icon
+				nda.cbSize = sizeof(nda);
+				nda.hIcon = h;
+				nda.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_INFO;
+				nda.uCallbackMessage = WM_USER + 1;
+				nda.hBalloonIcon = h;
+				nda.hWnd = CreateWindowEx(0, L"STATIC", L"Copilot", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 300, 200, 0, 0, GetModuleHandle(0), 0);
+				wcscpy_s(nda.szTip, L"");
+				Shell_NotifyIcon(NIM_ADD, &nda);
+				auto current = Quota2()["premium_interactions"];
+
+				for (;;)
+				{
+					DWORD d = WaitForSingleObject(hEventTray, INFINITE);
+					if (d != WAIT_OBJECT_0)
+						break;
+					Sleep(5000);
+
+					// Get the quota
+					auto q = Quota2()["premium_interactions"];
+					// If different than current, update the tooltip
+					if (q.usedRequests != current.usedRequests || q.entitlementRequests != current.entitlementRequests)
+					{
+						current = q;
+						std::wstring tip = L"Copilot Quota: ";
+						tip += std::to_wstring(q.usedRequests) + L"/" + std::to_wstring(q.entitlementRequests) + L" (" + std::to_wstring((int)(q.remainingPercentage)) + L"%)";
+						wcscpy_s(nda.szTip, tip.c_str());
+						// Show as balloon tip
+						nda.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP | NIF_INFO;
+						Shell_NotifyIcon(NIM_MODIFY, &nda);
+
+					}
+
+				}
+			};
+		std::thread t(thr);
+		t.detach();
+		for (int i = 0; i < 5; i++)
+		{
+			if (nda.hWnd)
+				break;
+			Sleep(250);
+		}
+	}
+#endif
+
 #ifdef _WIN32
 	void ShowStatus(HWND hParent, COPILOT_RAW_STATUS* u = 0)
 	{
@@ -1296,6 +1370,35 @@ nlohmann::json AuthStatus()
 		j["method"] = "account.getQuota";
 		auto r = ret(j, true);
 		return r;
+	}
+
+	auto Quota2()
+	{
+		std::map<std::string, COPILOT_RAW_QUOTA> qx;
+		auto j = Quota();
+		try
+		{
+			if (j.contains("result"))
+			{
+				// entitlementRequests
+				COPILOT_RAW_QUOTA q;
+				for (auto wh : { "chat","completions","premium_interactions" })
+				{
+					q.entitlementRequests = j["result"]["quotaSnapshots"][wh]["entitlementRequests"].get<int>();
+					q.overage = j["result"]["quotaSnapshots"][wh]["overage"].get<int>();
+					q.usedRequests = j["result"]["quotaSnapshots"][wh]["usedRequests"].get<int>();
+					q.remainingPercentage = j["result"]["quotaSnapshots"][wh]["remainingPercentage"].get<float>();
+					q.overageAllowedWithExhaustedQuota = j["result"]["quotaSnapshots"][wh]["overageAllowedWithExhaustedQuota"].get<bool>();
+					q.resetDate = j["result"]["quotaSnapshots"][wh]["resetDate"].get<std::string>();
+					qx[wh] = q;
+				}
+			}
+
+		}
+		catch (...)
+		{
+		}
+		return qx;
 	}
 
 	nlohmann::json DeleteSession(std::shared_ptr<COPILOT_SESSION> s)
@@ -2008,6 +2111,10 @@ nlohmann::json AuthStatus()
 		s->pending_message = pm;
 		pm->Sent = 1;
 		ret(j,false);
+#ifdef _WIN32
+		if (hEventTray)
+			SetEvent(hEventTray);
+#endif
 		return;
 	}
 
@@ -2701,6 +2808,12 @@ nlohmann::json AuthStatus()
 
 	~COPILOT_RAW()
 	{
+#ifdef _WIN32
+		if (hEventTray)
+		{
+			TrayIcon(0);
+		}
+#endif
 		if (x)
 		{
 			closesocket(x);
